@@ -45,8 +45,8 @@ use thiserror::Error;
 pub use dirsize::{dirsize_with, size_every_folder};
 pub use engine::run_search;
 pub use flat::{
-    FlatEntry, FlatOptions, FlatProgress, FlatSink, FlatSummary, FnFlatSink, flat_list,
-    flat_off_words, flat_view,
+    FlatOptions, FlatSummary, flat_key, flat_list, flat_off_words, flat_progress_line, flat_query,
+    flat_row, flat_view,
 };
 pub use hit::{ContentMatch, SearchHit};
 pub use newest::{Day, Newest, newest_files};

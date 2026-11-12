@@ -1,17 +1,17 @@
-//! The flat view on a small local tree: what is listed, the folder after
-//! the name, the depth, the mode, hidden entries and ignore files, the
-//! batches, the stop and the row cap, and every quoted line with its cell
+//! The flat view on a small local tree: what is listed, the key and the
+//! folder after the name, the depth, the mode, hidden entries and ignore
+//! files, the stop and the row cap, and every quoted line with its cell
 //! count.
 
 use std::ops::ControlFlow;
 use std::path::Path;
-use std::time::Duration;
 
 use diroxide_core::format::{BRAILLE_CELLS, within_cells};
 use diroxide_core::{Attributes, Place};
 use diroxide_vfs::{AttributeChange, LocalProvider, OpContext, Provider, Registry};
 
 use super::*;
+use crate::FnSink;
 use crate::test_support::scratch;
 
 fn write(path: &Path, text: &str) {
@@ -42,6 +42,7 @@ fn hide(path: &Path) {
 /// work/
 ///   a.txt, .secret.txt (hidden), skip.log (ignored), .gitignore (*.log)
 ///   2026/notes.txt, 2026/q3/report.pdf (2,100 bytes), 2026/q3/deep/x.txt
+///   2026/q3/deep/notes.txt (a name that repeats)
 struct Tree {
     _dir: tempfile::TempDir,
     root: Place,
@@ -65,80 +66,73 @@ fn tree() -> Tree {
         &root.join("2026").join("q3").join("deep").join("x.txt"),
         "x\n",
     );
+    write(
+        &root.join("2026").join("q3").join("deep").join("notes.txt"),
+        "more\n",
+    );
     let root = Place::parse(&root.to_string_lossy()).unwrap();
     Tree { _dir: dir, root }
 }
 
-/// Runs a flat view and keeps every batch.
-fn run(root: &Place, options: &FlatOptions) -> (Vec<Vec<FlatEntry>>, FlatSummary) {
-    let mut batches = Vec::new();
+/// Runs a flat view and keeps every hit.
+fn run(root: &Place, options: &FlatOptions) -> (Vec<SearchHit>, FlatSummary) {
+    let mut hits = Vec::new();
     let summary = flat_view(
         root,
         options,
         &Registry::with_local(),
         &SearchControl::new(),
-        &mut FnFlatSink(|rows| batches.push(rows)),
+        &mut FnSink(|hit| hits.push(hit)),
     )
     .unwrap();
-    (batches, summary)
+    (hits, summary)
 }
 
-fn paths(batches: &[Vec<FlatEntry>]) -> Vec<String> {
-    let mut paths: Vec<String> = batches
-        .iter()
-        .flatten()
-        .map(FlatEntry::relative_path)
-        .collect();
-    paths.sort();
-    paths
+fn keys(root: &Place, hits: &[SearchHit]) -> Vec<String> {
+    let mut keys: Vec<String> = hits.iter().map(|hit| flat_key(hit, root)).collect();
+    keys.sort();
+    keys
 }
 
 #[test]
-fn files_are_listed_with_their_folder_after_the_name() {
+fn files_are_listed_as_hits_keyed_by_their_path_below_the_base() {
     let tree = tree();
-    let (batches, summary) = run(&tree.root, &FlatOptions::new());
+    let (hits, summary) = run(&tree.root, &FlatOptions::new());
     assert_eq!(
-        paths(&batches),
+        keys(&tree.root, &hits),
         [
             "2026/notes.txt",
+            "2026/q3/deep/notes.txt",
             "2026/q3/deep/x.txt",
             "2026/q3/report.pdf",
             "a.txt",
             "skip.log"
-        ]
+        ],
+        "a panel reads no ignore files, so the flat view reads none"
     );
-    assert_eq!(summary.files, 5);
+    assert_eq!(summary.files, 6);
     assert_eq!(summary.folders, 3);
     assert_eq!(summary.folders_with_files, 4);
     assert!(!summary.cancelled && !summary.capped());
-    let report = batches
+    let list = flat_list(&tree.root, &hits);
+    let ids: HashSet<&str> = list.rows().iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(ids.len(), 6, "two notes.txt rows, two keys");
+    let report = hits
         .iter()
-        .flatten()
-        .find(|row| row.entry.name == "report.pdf")
+        .find(|hit| hit.entry.name == "report.pdf")
         .unwrap();
-    assert_eq!(report.folder, "2026/q3");
-    assert_eq!(report.depth, 3);
-    let spoken = report.row().spoken();
-    assert!(
-        spoken.starts_with("report.pdf, in 2026/q3, 2.1 KB"),
-        "{spoken}"
-    );
-    assert!(within_cells(&spoken, "report.pdf, in 2026/q3, 2.1 KB"));
-    let top = batches
-        .iter()
-        .flatten()
-        .find(|row| row.entry.name == "a.txt")
-        .unwrap();
-    assert_eq!(top.folder_words(), "at the top");
-    assert!(top.row().spoken().starts_with("a.txt, at the top, 6 bytes"));
-    // "Flat view of work: 5 files, every level", 39 cells.
+    // 33 cells: the results lister's words under the base.
+    let spoken = flat_row(report, &tree.root).spoken();
+    assert_eq!(spoken, "report.pdf, in work/2026/q3, 2.1 KB");
+    assert!(spoken.chars().count() <= BRAILLE_CELLS);
+    // 39 cells.
     let line = summary.count_line();
-    assert_eq!(line, "Flat view of work: 5 files, every level");
+    assert_eq!(line, "Flat view of work: 6 files, every level");
     assert!(line.chars().count() <= BRAILLE_CELLS);
-    assert_eq!(summary.on_words(), "Flat view on, 5 files in 4 folders");
+    assert_eq!(summary.on_words(), "Flat view on, 6 files in 4 folders");
     assert_eq!(
         summary.sentence(),
-        "Flat view of work: 5 files, every level. Hidden files skipped."
+        "Flat view of work: 6 files, every level. Hidden files skipped."
     );
 }
 
@@ -146,49 +140,49 @@ fn files_are_listed_with_their_folder_after_the_name() {
 fn the_depth_limits_the_levels_listed() {
     let tree = tree();
     let options = FlatOptions::new().with_depth(Some(2));
-    let (batches, summary) = run(&tree.root, &options);
+    let (hits, summary) = run(&tree.root, &options);
     assert_eq!(
-        paths(&batches),
+        keys(&tree.root, &hits),
         ["2026/notes.txt", "a.txt", "skip.log"],
         "depth 2 lists the base folder's files and its folders' files"
     );
     assert_eq!(summary.count_line(), "Flat view of work: 3 files, depth 2");
     assert_eq!(FlatOptions::new().with_depth(Some(0)).depth, None);
+    assert_eq!(flat_query(&tree.root, &options).scope.max_depth, Some(2));
+    assert!(flat_query(&tree.root, &options).filter.is_none());
 }
 
 #[test]
 fn folders_are_rows_when_the_mode_says_so() {
     let tree = tree();
     let options = FlatOptions::new().with_folders(true);
-    let (batches, summary) = run(&tree.root, &options);
-    let listed = paths(&batches);
+    let (hits, summary) = run(&tree.root, &options);
+    let listed = keys(&tree.root, &hits);
     assert!(listed.contains(&"2026".to_owned()), "{listed:?}");
     assert!(listed.contains(&"2026/q3/deep".to_owned()), "{listed:?}");
-    assert_eq!(listed.len(), 8);
-    let q3 = batches
-        .iter()
-        .flatten()
-        .find(|row| row.entry.name == "q3")
-        .unwrap();
-    assert!(q3.is_folder());
-    assert_eq!(q3.row().spoken(), "q3, folder, in 2026");
+    assert_eq!(listed.len(), 9);
+    let q3 = hits.iter().find(|hit| hit.entry.name == "q3").unwrap();
+    assert_eq!(
+        flat_row(q3, &tree.root).spoken(),
+        "q3, folder, in work/2026"
+    );
     assert_eq!(
         summary.count_line(),
-        "Flat view of work: 5 files, 3 folders, every level"
+        "Flat view of work: 6 files, 3 folders, every level"
     );
     assert_eq!(options.mode_words(), "files and folders");
     assert_eq!(FlatOptions::new().mode_words(), "files only");
 }
 
 #[test]
-fn hidden_entries_and_ignore_files_follow_the_panel() {
+fn hidden_entries_follow_the_panel_and_ignore_files_are_asked_for() {
     let tree = tree();
-    let (batches, _) = run(&tree.root, &FlatOptions::for_panel(true, false));
-    let listed = paths(&batches);
+    let (hits, _) = run(&tree.root, &FlatOptions::for_panel(true));
+    let listed = keys(&tree.root, &hits);
     assert!(listed.contains(&".secret.txt".to_owned()), "{listed:?}");
-    assert!(listed.contains(&"skip.log".to_owned()), "{listed:?}");
-    let (batches, summary) = run(&tree.root, &FlatOptions::for_panel(false, true));
-    let listed = paths(&batches);
+    let options = FlatOptions::for_panel(false).with_ignore_files(true);
+    let (hits, summary) = run(&tree.root, &options);
+    let listed = keys(&tree.root, &hits);
     assert!(!listed.contains(&".secret.txt".to_owned()), "{listed:?}");
     assert!(!listed.contains(&"skip.log".to_owned()), "{listed:?}");
     assert!(
@@ -201,21 +195,6 @@ fn hidden_entries_and_ignore_files_follow_the_panel() {
 }
 
 #[test]
-fn rows_come_in_batches_and_the_first_is_small() {
-    let dir = scratch();
-    let root = dir.path().join("many");
-    for n in 0..100 {
-        write(&root.join(format!("f{n:03}.txt")), "x");
-    }
-    let root = Place::parse(&root.to_string_lossy()).unwrap();
-    let options = FlatOptions::new().with_batches(40, Duration::from_secs(60));
-    let (batches, summary) = run(&root, &options);
-    assert_eq!(summary.shown, 100);
-    let sizes: Vec<usize> = batches.iter().map(Vec::len).collect();
-    assert_eq!(sizes, [FIRST_BATCH, 40, 28], "{sizes:?}");
-}
-
-#[test]
 fn a_stop_from_the_sink_ends_it_and_says_how_far_it_got() {
     let dir = scratch();
     let root = dir.path().join("Photos");
@@ -223,14 +202,18 @@ fn a_stop_from_the_sink_ends_it_and_says_how_far_it_got() {
         write(&root.join(format!("p{n:03}.jpg")), "x");
     }
     let root = Place::parse(&root.to_string_lossy()).unwrap();
-    struct StopAfterOne(usize);
-    impl FlatSink for StopAfterOne {
-        fn batch(&mut self, rows: Vec<FlatEntry>) -> ControlFlow<()> {
-            self.0 += rows.len();
-            ControlFlow::Break(())
+    struct StopAt(u64);
+    impl SearchSink for StopAt {
+        fn found(&mut self, _hit: SearchHit) -> ControlFlow<()> {
+            self.0 += 1;
+            if self.0 >= 10 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
         }
     }
-    let mut sink = StopAfterOne(0);
+    let mut sink = StopAt(0);
     let summary = flat_view(
         &root,
         &FlatOptions::new().with_threads(Some(1)),
@@ -240,7 +223,7 @@ fn a_stop_from_the_sink_ends_it_and_says_how_far_it_got() {
     )
     .unwrap();
     assert!(summary.cancelled);
-    assert_eq!(sink.0, FIRST_BATCH);
+    assert_eq!(sink.0, 10);
     let words = summary.on_words();
     assert!(words.starts_with("Stopped at "), "{words}");
     assert!(words.ends_with(" entries"), "{words}");
@@ -258,20 +241,20 @@ fn a_cancel_before_the_start_lists_nothing() {
         &FlatOptions::new(),
         &Registry::with_local(),
         &control,
-        &mut FnFlatSink(|batch: Vec<FlatEntry>| rows += batch.len()),
+        &mut FnSink(|_| rows += 1),
     )
     .unwrap();
     assert!(summary.cancelled);
-    assert_eq!(rows as u64, summary.shown);
+    assert_eq!(rows, summary.shown);
     assert!(summary.on_words().starts_with("Stopped at "));
 }
 
 #[test]
 fn the_row_cap_stops_the_rows_and_not_the_count() {
     let tree = tree();
-    let (batches, summary) = run(&tree.root, &FlatOptions::new().with_row_cap(Some(2)));
-    assert_eq!(paths(&batches).len(), 2);
-    assert_eq!(summary.files, 5);
+    let (hits, summary) = run(&tree.root, &FlatOptions::new().with_row_cap(Some(2)));
+    assert_eq!(hits.len(), 2);
+    assert_eq!(summary.files, 6);
     assert!(summary.capped());
     assert_eq!(
         summary.skip_sentences()[0],
@@ -298,6 +281,13 @@ fn the_words_say_their_meaning_first() {
         summary.count_line(),
         "Flat view of work: 1,204 files, depth 3"
     );
+    // 35 cells: the catalog's form.
+    let small = FlatSummary {
+        files: 14,
+        folders_with_files: 4,
+        ..summary.clone()
+    };
+    assert_eq!(small.on_words(), "Flat view on, 14 files in 4 folders");
     let photos = FlatSummary {
         root_name: "Photos".to_owned(),
         files: 4200,
@@ -314,31 +304,28 @@ fn the_words_say_their_meaning_first() {
     };
     assert_eq!(stopped.on_words(), "Stopped at 4,200 entries");
     // 41 cells; the count is within the first 40.
-    let progress = FlatProgress {
-        root_name: "Photos".to_owned(),
-        files: 4200,
-        ..FlatProgress::default()
-    };
-    assert_eq!(progress.line(), "Flat view of Photos: 4,200 entries so far");
-    assert!(within_cells(
-        &progress.line(),
-        "Flat view of Photos: 4,200 entries"
-    ));
-    let held = FlatProgress {
-        paused: true,
-        ..progress
-    };
-    assert!(within_cells(
-        &held.line(),
-        "Flat view of Photos held: 4,200"
-    ));
-    // 23 cells.
     let photos_place = Place::parse(if cfg!(windows) {
         r"D:\Photos"
     } else {
         "/Photos"
     })
     .unwrap();
+    let progress = SearchProgress {
+        found: 4200,
+        ..SearchProgress::default()
+    };
+    let line = flat_progress_line(&photos_place, &progress);
+    assert_eq!(line, "Flat view of Photos: 4,200 entries so far");
+    assert!(within_cells(&line, "Flat view of Photos: 4,200 entries"));
+    let held = SearchProgress {
+        paused: true,
+        ..progress
+    };
+    assert!(within_cells(
+        &flat_progress_line(&photos_place, &held),
+        "Flat view of Photos held: 4,200"
+    ));
+    // 23 cells.
     assert_eq!(flat_off_words(&photos_place), "Flat view off. Photos.");
     let list = flat_list(&photos_place, &[]);
     assert_eq!(list.title(), "Flat view of Photos");
