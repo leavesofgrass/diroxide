@@ -533,12 +533,17 @@ impl MediaFacts {
             }
         }
         if let Some(seconds) = self.seconds {
-            out.push(Field::new(
+            let field = Field::new(
                 "media.duration",
                 "Duration",
                 duration_words(seconds),
                 DetailGroup::Content,
-            ));
+            );
+            // Sorted as a length, not as its words (lane FX's sort value).
+            out.push(match Duration::try_from_secs_f64(seconds) {
+                Ok(length) => field.sorted_by_length(length),
+                Err(_) => field,
+            });
         }
         if let Some((w, h)) = self
             .streams
@@ -546,12 +551,16 @@ impl MediaFacts {
             .find(|s| s.kind == StreamKind::Video)
             .and_then(|s| s.size)
         {
-            out.push(Field::new(
-                "media.dimensions",
-                "Dimensions",
-                format!("{w} by {h}"),
-                DetailGroup::Content,
-            ));
+            // Sorted by its pixels, so 1920 by 1080 comes after 640 by 480.
+            out.push(
+                Field::new(
+                    "media.dimensions",
+                    "Dimensions",
+                    format!("{w} by {h}"),
+                    DetailGroup::Content,
+                )
+                .sorted_by_count(u64::from(w) * u64::from(h)),
+            );
         }
         let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
         for stream in &self.streams {

@@ -39,7 +39,6 @@ use diroxide_core::{
     Command, ConflictPolicy, Effect, Entry, EntryKind, JobKind, JobRequest, Key, ListModel,
     ListRow, Message, Move, Place, Side, SortKey,
 };
-use diroxide_ops::{Plan, Step};
 
 use super::organize::Wants;
 use super::{App, Flow, Then};
@@ -219,8 +218,19 @@ pub(super) enum PhotoWants {
     Review(Box<Review>),
     /// The field the review's move place is typed in.
     ReviewMove(Box<Review>),
-    /// The question before the month folders, with its plan.
-    Months(Box<Plan>),
+    /// The question before the month folders, with the moves Yes plans.
+    Months(Box<MonthMoves>),
+}
+
+/// The month folders' moves, planned by the engine on Yes (lane AF:
+/// `Engine::plan_moves`, so the move's checks and the plugins'
+/// before-move hooks are any move's).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct MonthMoves {
+    /// The job, the panel's folder its destination.
+    request: JobRequest,
+    /// Each picture and its month's folder.
+    moves: Vec<(Place, Place)>,
 }
 
 impl App {
@@ -794,8 +804,8 @@ impl App {
         effects
     }
 
-    /// Move into month folders: the plan, made here and run by the job
-    /// engine as one job, under its question.
+    /// Move into month folders: the question and its rows made here, the
+    /// moves planned by the job engine on Yes and run as one job.
     fn month_folders(&mut self, side: Side) -> Vec<Effect> {
         let found = self.pictures(side);
         let marked: HashSet<String> = self
@@ -815,28 +825,21 @@ impl App {
         }
         let folder = self.panel(side).place().clone();
         let by_month = months(&pictures);
-        let mut steps = Vec::new();
+        let mut moves = Vec::new();
         let mut rows = Vec::new();
         for (month, members) in &by_month {
             let Ok(target) = folder.join(month) else {
                 continue;
             };
             let existing = self.panel(side).entry(month).map(|e| e.kind);
-            match existing {
-                Some(EntryKind::Folder) => {}
-                Some(_) => {
-                    let line = words::month_taken_line(month);
-                    return vec![self.say(Message::error(line))];
-                }
-                None => steps.push(Step::MakeFolder {
-                    place: target.clone(),
-                }),
+            if existing.is_some_and(|kind| kind != EntryKind::Folder) {
+                let line = words::month_taken_line(month);
+                return vec![self.say(Message::error(line))];
             }
             rows.push(month_row(month, members.len(), existing.is_none()));
             for i in members {
-                let name = &pictures[*i].name;
-                if let (Ok(from), Ok(to)) = (folder.join(name), target.join(name)) {
-                    steps.push(Step::Move { from, to });
+                if let Ok(from) = folder.join(&pictures[*i].name) {
+                    moves.push((from, target.clone()));
                 }
             }
         }
@@ -846,18 +849,13 @@ impl App {
             rows.push(NO_DATE_LINE.to_owned());
         }
         let job = self.next_job_id();
-        let mut plan = Plan::new(job, JobKind::Move, steps, ConflictPolicy::Ask);
-        plan.facts.files = pictures.len() as u64;
-        plan.facts.items = pictures.len() as u64;
-        plan.facts.destination = Some(folder.clone());
-        for picture in &pictures {
-            if let (Ok(place), Some(entry)) = (
-                folder.join(&picture.name),
-                self.panel(side).entry(&picture.name),
-            ) {
-                plan.expected.insert(place, entry.clone());
-            }
-        }
+        let mut request = JobRequest::new(
+            job,
+            JobKind::Move,
+            moves.iter().map(|(from, _)| from.clone()).collect(),
+        );
+        request.destination = Some(folder.clone());
+        request.conflicts = ConflictPolicy::Ask;
         let question = with_default_no(Message::question(&month_question(
             pictures.len(),
             by_month.len(),
@@ -868,7 +866,7 @@ impl App {
                 listing: rows,
                 on_yes: Command::new(ids::YES),
             },
-            Wants::Photos(PhotoWants::Months(Box::new(plan))),
+            Wants::Photos(PhotoWants::Months(Box::new(MonthMoves { request, moves }))),
         )
     }
 
@@ -889,14 +887,20 @@ impl App {
         }
     }
 
-    /// Yes to the month folders' question: the job runs, its result said
-    /// and its Undo kept as any job's.
+    /// Yes to the month folders' question: the engine plans the moves
+    /// (a hook's veto or a plan's own question is said then), and the job
+    /// runs with no second question, its result said and its Undo kept as
+    /// any job's.
     pub(super) fn photo_yes(&mut self, wants: PhotoWants) -> Vec<Effect> {
-        let PhotoWants::Months(plan) = wants else {
+        let PhotoWants::Months(months) = wants else {
             return Vec::new();
         };
+        let MonthMoves { mut request, moves } = *months;
+        if request.errors.is_ask() {
+            request.errors = self.settings.jobs.on_errors.policy();
+        }
         self.flows.insert(
-            plan.job,
+            request.id,
             Flow {
                 side: self.active,
                 note: None,
@@ -905,7 +909,11 @@ impl App {
                 kind: JobKind::Move,
             },
         );
-        self.run_plan(*plan)
+        self.request(Request::PlanMoves {
+            request: Box::new(request),
+            moves,
+        });
+        Vec::new()
     }
 
     /// Escape on one of the helpers' dialogs, after it closed.

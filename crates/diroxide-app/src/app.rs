@@ -1033,6 +1033,9 @@ pub struct App {
     key_test: bool,
     quit_folder: Option<Place>,
     keep_shell: bool,
+    /// The file F4 last started the editor on, and when: a second F4 on
+    /// it within a moment says so instead of starting another (lane AF).
+    editor_started: Option<(Place, Timestamp)>,
     completing: Option<Completing>,
     /// The field's text as the last Tab left it with the list open, so a
     /// second Tab moves into the list (plan section 5.19).
@@ -1427,6 +1430,7 @@ impl App {
             key_test: false,
             quit_folder: None,
             keep_shell: false,
+            editor_started: None,
             completing: None,
             tabbed: None,
             places: Vec::new(),

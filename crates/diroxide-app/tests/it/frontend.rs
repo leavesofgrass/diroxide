@@ -164,6 +164,63 @@ fn a_program_started_without_waiting_is_said_in_the_apps_words() {
     assert_eq!(programs[2].program, OsString::from("testeditor"));
 }
 
+/// F4 again on the file the editor was just started on starts nothing
+/// for two seconds and says so (the owner's Notepad report of November
+/// 6, 2026: repeated starts overlapped into Notepad's "cannot find the
+/// path" dialog); another file, a moment later, or a start that failed
+/// starts it again.
+#[test]
+fn a_second_f4_at_once_says_the_editor_is_already_started() {
+    let starter = Arc::new(Starter::default());
+    let mut s = started(starter.clone());
+    assert!(s.app.focus_name(Side::Left, "f1.txt"));
+    assert_eq!(s.key("f4"), ["Started the editor on f1.txt"]);
+    let again = s.key("f4");
+    assert_eq!(again, ["Editor already started on f1.txt"]);
+    assert!(again[0].chars().count() <= 40, "{again:?}");
+    s.clock.advance(1);
+    assert_eq!(s.key("f4"), ["Editor already started on f1.txt"]);
+    assert_eq!(starter.programs.lock().unwrap().len(), 1);
+    // Another file starts at once.
+    assert!(s.app.focus_name(Side::Left, "f2.txt"));
+    assert_eq!(s.key("f4"), ["Started the editor on f2.txt"]);
+    // Two seconds on, the same file starts again.
+    s.clock.advance(2);
+    assert_eq!(s.key("f4"), ["Started the editor on f2.txt"]);
+    assert_eq!(starter.programs.lock().unwrap().len(), 3);
+
+    // A start that failed is tried again on the next press.
+    let refusing = Arc::new(Starter {
+        refusal: Some("the program was not found".to_owned()),
+        ..Starter::default()
+    });
+    let mut s = started(refusing.clone());
+    assert!(s.app.focus_name(Side::Left, "f1.txt"));
+    for _ in 0..2 {
+        let said = s.key("f4");
+        assert!(
+            said[0].starts_with("Could not start the editor on f1.txt"),
+            "{said:?}"
+        );
+    }
+    assert_eq!(refusing.programs.lock().unwrap().len(), 2);
+}
+
+/// The terminal's editor has the screen until it ends, so F4 at once
+/// after it ended starts it again.
+#[test]
+fn the_terminal_starts_the_editor_again_after_it_ended() {
+    let (_, mut s) = world();
+    assert!(s.app.focus_name(Side::Left, "f1.txt"));
+    for _ in 0..2 {
+        let said = s.key("f4");
+        assert!(
+            said.iter().any(|l| l.starts_with("Back in diroxide")),
+            "{said:?}"
+        );
+    }
+}
+
 /// A start that fails says why and what to do: the cause the launcher
 /// gives, with the TERMINAL variable when no terminal program was found.
 #[test]

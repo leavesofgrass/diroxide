@@ -106,6 +106,24 @@ fn the_golden_key_names_read_into_words() {
     }
 }
 
+/// The length and the size sort as numbers, not as their words.
+#[test]
+fn duration_and_dimensions_sort_by_their_numbers() {
+    let sort_of = |facts: &MediaFacts, key: &str| {
+        facts
+            .fields()
+            .into_iter()
+            .find(|f| f.key == key)
+            .and_then(|f| f.sort)
+    };
+    let mp4 = parse(MP4).unwrap();
+    let mkv = parse(MKV).unwrap();
+    assert_eq!(sort_of(&mp4, "media.dimensions"), Some(320 * 240));
+    assert_eq!(sort_of(&mkv, "media.dimensions"), Some(640 * 360));
+    let length = sort_of(&mp4, "media.duration").unwrap();
+    assert!((1000..3000).contains(&length), "{length} ms");
+}
+
 #[test]
 fn the_words_for_lengths_rates_channels_and_codecs() {
     assert_eq!(duration_words(221.0), "3 min 41 sec");

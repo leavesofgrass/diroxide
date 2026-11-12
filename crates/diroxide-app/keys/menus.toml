@@ -225,12 +225,20 @@ command = "file.gpg-encrypt"
 access = "g"
 
 [[menu.item]]
+command = "file.gpg-encrypt-text"
+access = "x"
+
+[[menu.item]]
 command = "file.gpg-decrypt"
 access = "e"
 
 [[menu.item]]
 command = "file.sign"
 access = "s"
+
+[[menu.item]]
+command = "file.sign-text"
+access = "a"
 
 [[menu.item]]
 command = "file.verify-signature"

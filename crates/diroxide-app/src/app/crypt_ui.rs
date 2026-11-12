@@ -63,6 +63,8 @@ pub(super) enum CryptWants {
         side: Side,
         /// The files.
         sources: Vec<Place>,
+        /// Into ASCII armor, NAME.asc (Encrypt with gpg, as text).
+        armor: bool,
     },
     /// Sign with gpg: the key typed, or none for the default.
     Signer {
@@ -70,6 +72,8 @@ pub(super) enum CryptWants {
         side: Side,
         /// The files.
         sources: Vec<Place>,
+        /// Into ASCII armor, NAME.asc (Sign with gpg, as text).
+        armor: bool,
     },
     /// A gpg plan's question: Yes runs it.
     Run {
@@ -88,10 +92,12 @@ pub(super) enum CryptWants {
 }
 
 /// The submenu's gpg commands.
-const GPG: [CommandId; 4] = [
+const GPG: [CommandId; 6] = [
     ids::GPG_ENCRYPT,
+    ids::GPG_ENCRYPT_TEXT,
     ids::GPG_DECRYPT,
     ids::SIGN,
+    ids::SIGN_TEXT,
     ids::VERIFY_SIGNATURE,
 ];
 
@@ -163,13 +169,26 @@ impl App {
             };
             return self.plan_gpg(side, sources, options);
         }
-        let (label, wants) = if *id == ids::GPG_ENCRYPT {
+        // The "as text" commands make ASCII armor, NAME.asc (lane AF).
+        let armor = *id == ids::GPG_ENCRYPT_TEXT || *id == ids::SIGN_TEXT;
+        let (label, wants) = if *id == ids::GPG_ENCRYPT || *id == ids::GPG_ENCRYPT_TEXT {
             (
                 crypt::RECIPIENTS_LABEL,
-                CryptWants::Recipients { side, sources },
+                CryptWants::Recipients {
+                    side,
+                    sources,
+                    armor,
+                },
             )
         } else {
-            (crypt::SIGNER_LABEL, CryptWants::Signer { side, sources })
+            (
+                crypt::SIGNER_LABEL,
+                CryptWants::Signer {
+                    side,
+                    sources,
+                    armor,
+                },
+            )
         };
         let field = EntryField::new(label, CompletionSource::None);
         self.open_organize(Dialog::edit(field), Wants::Crypt(wants))
@@ -465,7 +484,11 @@ impl App {
     /// answers on Yes.
     pub(super) fn crypt_accept(&mut self, wants: CryptWants, text: &str) -> Vec<Effect> {
         match wants {
-            CryptWants::Recipients { side, sources } => {
+            CryptWants::Recipients {
+                side,
+                sources,
+                armor,
+            } => {
                 let mut effects = self.close_top();
                 let recipients = crypt::recipients_of(text);
                 let action = if recipients.is_empty() {
@@ -473,19 +496,20 @@ impl App {
                 } else {
                     GpgAction::Encrypt { recipients }
                 };
-                let options = GpgOptions {
-                    action,
-                    armor: false,
-                };
+                let options = GpgOptions { action, armor };
                 effects.extend(self.plan_gpg(side, sources, options));
                 effects
             }
-            CryptWants::Signer { side, sources } => {
+            CryptWants::Signer {
+                side,
+                sources,
+                armor,
+            } => {
                 let mut effects = self.close_top();
                 let key = Some(text.trim().to_owned()).filter(|k| !k.is_empty());
                 let options = GpgOptions {
                     action: GpgAction::Sign { key },
-                    armor: false,
+                    armor,
                 };
                 effects.extend(self.plan_gpg(side, sources, options));
                 effects

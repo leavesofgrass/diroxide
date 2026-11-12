@@ -366,6 +366,17 @@ pub enum Request {
     /// [`AppEvent::Planned`](crate::AppEvent::Planned). Counting progress
     /// arrives as job progress meanwhile.
     Plan(Box<JobRequest>),
+    /// Plan one move job into several folders, each source with the
+    /// folder it goes into (Move into month folders, through the engine's
+    /// `plan_moves`, so plugins' before-move hooks hear it; lane AF);
+    /// answered like [`Request::Plan`].
+    PlanMoves {
+        /// The job: its id, origin, conflicts and errors, and the folder
+        /// said as its destination.
+        request: Box<JobRequest>,
+        /// Each source and the folder it goes into.
+        moves: Vec<(Place, Place)>,
+    },
     /// Plugins and script commands: scan, enable, run, answer a plugin's
     /// call (W4d).
     Plugins(Box<crate::plugins::PluginRequest>),

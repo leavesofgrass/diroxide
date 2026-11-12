@@ -29,7 +29,9 @@
 //! - On Windows, a program started in a console of its own
 //!   ([`win::start_in_new_console`]) for the window's Shell here and Run
 //!   command (`crate::spawn`), with its command line quoted as Windows
-//!   programs split it.
+//!   programs split it; and a program with windows of its own started
+//!   through the shell ([`win::start_through_shell`]), as File Explorer
+//!   starts it.
 //!
 //! Elsewhere the console calls do nothing: a program started from a
 //! terminal on Linux or macOS writes to it, and one started from the
@@ -259,6 +261,51 @@ pub(crate) mod win {
         unsafe {
             let _ = CloseHandle(info.hThread);
             let _ = CloseHandle(info.hProcess);
+        }
+        Ok(())
+    }
+
+    /// Starts a program with windows of its own through the shell, as
+    /// File Explorer does (`ShellExecuteExW`, the open verb, no message
+    /// box of the shell's: the app says the cause): its arguments quoted
+    /// as Windows programs split them, in `folder`; not waited for. The
+    /// shell takes no environment, so the program gets this process's.
+    pub(crate) fn start_through_shell(
+        program: &std::ffi::OsStr,
+        args: &[std::ffi::OsString],
+        folder: &std::path::Path,
+    ) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::{
+            SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW,
+        };
+        /// `SW_SHOWNORMAL`: the program's window as the system chooses.
+        const SHOW_NORMAL: i32 = 1;
+        let wide = |text: &std::ffi::OsStr| -> Vec<u16> { text.encode_wide().chain([0]).collect() };
+        let verb = wide(std::ffi::OsStr::new("open"));
+        let file = wide(program);
+        let mut parameters = match args.split_first() {
+            Some((first, rest)) => command_line(first, rest),
+            None => Vec::new(),
+        };
+        parameters.push(0);
+        let folder = wide(folder.as_os_str());
+        let mut info = SHELLEXECUTEINFOW {
+            cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
+            fMask: SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC,
+            lpVerb: verb.as_ptr(),
+            lpFile: file.as_ptr(),
+            lpParameters: parameters.as_ptr(),
+            lpDirectory: folder.as_ptr(),
+            nShow: SHOW_NORMAL,
+            ..Default::default()
+        };
+        // SAFETY: every string is ours, ends with a zero and outlives the
+        // call; the structure's size is its own; no process handle is
+        // asked for, so none is left to close.
+        let started = unsafe { ShellExecuteExW(&mut info) };
+        if started == 0 {
+            return Err(crate::spawn::plain_cause(&std::io::Error::last_os_error()));
         }
         Ok(())
     }

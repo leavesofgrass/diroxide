@@ -22,6 +22,10 @@ use crate::request::{Request, SpawnKind};
 use crate::settings;
 use crate::state;
 
+/// How long, in seconds, a second F4 on the file the editor was just
+/// started on says so instead of starting it again.
+pub(super) const EDITOR_AGAIN_SECONDS: i64 = 2;
+
 /// The keyboard list's first row: the help for where the focus is.
 const HELP_ROW: &str = "help";
 
@@ -857,7 +861,13 @@ impl App {
         vec![self.say(Message::info("Shell here: exit the shell to come back."))]
     }
 
-    /// F4: the focused file in the editor, the screen handed over.
+    /// F4: the focused file in the editor, the screen handed over. A
+    /// second F4 on the same file within [`EDITOR_AGAIN_SECONDS`] of the
+    /// first, while the editor has not ended, starts nothing and says
+    /// "Editor already started on notes.txt": in the window the editor
+    /// opens in a window of its own and may take a moment, and repeated
+    /// starts of Windows' Notepad overlap into its "cannot find the path"
+    /// dialog (the owner's report of November 6, 2026).
     pub(super) fn edit_file(&mut self) -> Vec<Effect> {
         let side = self.active;
         let panel = self.panel(side);
@@ -869,6 +879,15 @@ impl App {
             let text = format!("Not a file: {}", entry.display_name());
             return vec![self.say(Message::info(text))];
         }
+        let now = self.now();
+        let again = self.editor_started.as_ref().is_some_and(|(file, at)| {
+            *file == place && *at <= now && now < at.plus_seconds(EDITOR_AGAIN_SECONDS)
+        });
+        if again {
+            let text = format!("Editor already started on {}", entry.display_name());
+            return vec![self.say(Message::info(text))];
+        }
+        self.editor_started = Some((place.clone(), now));
         let spawn = self.spawn_for(side, SpawnKind::Editor(place));
         self.request(Request::Spawn(Box::new(spawn)));
         Vec::new()
@@ -882,6 +901,8 @@ impl App {
         folder: &Place,
         result: Result<Option<i32>, String>,
     ) -> Vec<Effect> {
+        // The editor that had the terminal has ended: F4 starts it again.
+        self.editor_started = None;
         let leaf = place_leaf(folder);
         let message = match result {
             Ok(Some(0) | None) => Message::info(format!("Back in diroxide, {leaf}")),
@@ -928,6 +949,10 @@ impl App {
         let message = match result {
             Ok(()) => Message::info(format!("Started {what}")),
             Err(cause) => {
+                // Nothing started, so the next F4 tries again at once.
+                if matches!(kind, SpawnKind::Editor(_) | SpawnKind::EditorAt { .. }) {
+                    self.editor_started = None;
+                }
                 let cause = cause.trim();
                 let cause = if cause.is_empty() {
                     "the program was not found or could not run"
