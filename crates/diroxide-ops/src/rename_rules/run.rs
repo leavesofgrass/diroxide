@@ -79,7 +79,7 @@ pub fn read_context<'a>(
 
 /// Reads each source again through its provider, so the plan made at the
 /// owner's yes sees the entries as they are. A source that cannot be read
-/// keeps what the preview had; the engine's own planning then says why.
+/// is marked gone, so its row says "source is gone".
 fn fresh_sources(
     engine: &Engine,
     sources: &[RenameSource],
@@ -93,8 +93,8 @@ fn fresh_sources(
                 .registry()
                 .resolve(&source.place)
                 .and_then(|provider| provider.stat(&source.place, &ctx))
-                .unwrap_or_else(|_| source.entry.clone());
-            RenameSource::new(source.place.clone(), entry)
+                .map(|entry| RenameSource::new(source.place.clone(), entry));
+            entry.unwrap_or_else(|_| source.clone().gone())
         })
         .collect()
 }
@@ -125,16 +125,15 @@ pub fn run_rename(plan: &RenamePlan, env: &RenameEnv<'_>) -> Result<JobReport, R
             .rows()
             .iter()
             .find(|row| row.state.is_problem())
-            .map(|row| row.line())
+            .map(|row| row.detail())
             .unwrap_or_default();
-        let detail = first.strip_prefix("Problem, ").unwrap_or(&first);
         return Err(RenameRefused::Changed(format!(
-            "The folder changed since the preview: {detail}"
+            "The folder changed since the preview: {first}."
         )));
     }
     if fresh.pairs() != plan.pairs() {
         return Err(RenameRefused::Changed(
-            "The names changed since the preview: preview again".to_owned(),
+            "The names changed since the preview. Preview again.".to_owned(),
         ));
     }
     let request = fresh.request(env.job)?;

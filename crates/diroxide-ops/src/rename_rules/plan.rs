@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use diroxide_core::format::{count, grouped};
 use diroxide_core::job::ConflictPolicy;
 use diroxide_core::names::spell_out;
-use diroxide_core::{Entry, EntryKind, JobId, JobKind, JobRequest, Place, UtcOffset};
+use diroxide_core::{Entry, EntryKind, JobId, JobKind, JobRequest, Place, PlaceKind, UtcOffset};
 use diroxide_vfs::Capabilities;
-use diroxide_vfs::names::{NameIssue, NameRules, check_name_with};
+use diroxide_vfs::names::{NameIssue, NameRules, check_name_with, numbered_name};
 
 use super::compile::{CompiledRecipe, RecipeError, Subject, ValueProblem};
 use super::rule::Recipe;
@@ -26,12 +26,26 @@ pub struct RenameSource {
     pub place: Place,
     /// The entry, for its name, kind, dates and size.
     pub entry: Entry,
+    /// Whether the source could not be found when it was read last; its
+    /// row is then "Problem, source is gone".
+    pub gone: bool,
 }
 
 impl RenameSource {
     /// A source from its place and entry.
     pub fn new(place: Place, entry: Entry) -> Self {
-        Self { place, entry }
+        Self {
+            place,
+            entry,
+            gone: false,
+        }
+    }
+
+    /// The same source, marked gone.
+    #[must_use]
+    pub fn gone(mut self) -> Self {
+        self.gone = true;
+        self
     }
 
     /// Whether it is a folder, whose whole name is its stem.
@@ -182,6 +196,9 @@ pub struct Choices {
     /// The rows given a name by hand ("Edited by you"); later rule
     /// changes do not overwrite them.
     pub edited: BTreeMap<usize, String>,
+    /// Whether the names came through the pairs door
+    /// ([`plan_pairs`]), so they are not said as edited by hand.
+    pub from_pairs: bool,
 }
 
 impl Choices {
@@ -228,11 +245,24 @@ pub enum Blocker {
     NotUnicode,
     /// The place is a drive or a root, which has no name to change.
     NoFolder,
+    /// The source is no longer there.
+    SourceGone,
+    /// The source is inside an archive: renaming there rewrites the
+    /// archive, which batch rename does not do.
+    InArchive,
+    /// The new name is longer than the place allows.
+    TooLong {
+        /// The new name's length, in the place's units (UTF-16 units on
+        /// Windows, bytes elsewhere).
+        length: usize,
+        /// The longest the place allows.
+        max: usize,
+    },
 }
 
 impl Blocker {
     /// The blocker in words, after "Problem, ": "no value for
-    /// {meta:exif.date}".
+    /// {meta:exif.date}"; "too long (260 of 255)".
     pub fn words(&self) -> String {
         match self {
             Blocker::Name(NameIssue::ReservedCharacter(c)) => {
@@ -242,15 +272,19 @@ impl Blocker {
             Blocker::Name(NameIssue::TooLong { max }) => format!("too long, over {max}"),
             Blocker::Name(issue) => format!("name {}", issue.describe()),
             Blocker::MissingValue(placeholder) => format!("no value for {placeholder}"),
-            Blocker::CounterBelowZero => "counter below zero".to_owned(),
+            Blocker::CounterBelowZero => "counter went below zero".to_owned(),
             Blocker::NotUnicode => "name is not valid Unicode".to_owned(),
             Blocker::NoFolder => "a drive has no name to change".to_owned(),
+            Blocker::SourceGone => "source is gone".to_owned(),
+            Blocker::InArchive => "inside an archive".to_owned(),
+            Blocker::TooLong { length, max } => format!("too long ({length} of {max})"),
         }
     }
 
     /// Whether the row has a new name worth showing after the words.
     fn shows_new_name(&self) -> bool {
         matches!(self, Blocker::Name(issue) if *issue != NameIssue::Empty)
+            || matches!(self, Blocker::TooLong { .. })
     }
 }
 
@@ -361,6 +395,17 @@ pub struct RenameRow {
 }
 
 impl RenameRow {
+    /// The row's problem or care in words with its names, for a message
+    /// that quotes it: "name taken, a.txt becomes b.txt".
+    pub fn detail(&self) -> String {
+        let line = self.line();
+        let rest = line
+            .strip_prefix("Problem, ")
+            .or_else(|| line.strip_prefix("Care, "))
+            .unwrap_or(&line);
+        rest.replacen(": ", ", ", 1)
+    }
+
     /// The row in words, its state first so the first 40 cells hold the
     /// state and the name that identifies the row. An ordinary row has no
     /// state word: "IMG_0001.jpg becomes trip-0001.jpg". Hidden
@@ -401,9 +446,10 @@ impl RenameRow {
     }
 }
 
-/// A plan the owner reads: the rows, problems first, and what made them,
-/// so [`super::run_rename`] can plan again against the folders as they
-/// are when the owner says yes.
+/// A plan the owner reads: the rows in the given order (the panel's, which
+/// the counter follows), with [`RenamePlan::problems_first`] as a view, and
+/// what made them, so [`super::run_rename`] can plan again against the
+/// folders as they are when the owner says yes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RenamePlan {
     rows: Vec<RenameRow>,
@@ -411,6 +457,7 @@ pub struct RenamePlan {
     recipe: Recipe,
     choices: Choices,
     portable: bool,
+    facts: HashMap<Place, FolderFacts>,
 }
 
 /// Why a plan cannot become a job.
@@ -421,7 +468,7 @@ pub enum RenameRefused {
     #[error("{0}")]
     Problems(String),
     /// No row would change.
-    #[error("Nothing to rename: no name would change")]
+    #[error("Nothing to rename: no file would change.")]
     NothingToRename,
     /// The folders changed since the preview; the line says how.
     #[error("{0}")]
@@ -442,23 +489,24 @@ impl RenameRefused {
 }
 
 impl RenamePlan {
-    /// The rows, problems first, then rows that need care, then changes,
-    /// then unchanged and skipped rows; the given order inside each.
+    /// The rows in the given order: the panel's order when the dialog
+    /// opened, which the counter follows.
     pub fn rows(&self) -> &[RenameRow] {
         &self.rows
     }
 
-    /// The rows in the given order (the counter's order), for a view
-    /// that keeps the panel's order.
-    pub fn rows_in_order(&self) -> Vec<&RenameRow> {
+    /// The problems-first view: problem rows, then rows that need care,
+    /// then changes, then unchanged and skipped rows, the given order
+    /// inside each.
+    pub fn problems_first(&self) -> Vec<&RenameRow> {
         let mut rows: Vec<&RenameRow> = self.rows.iter().collect();
-        rows.sort_by_key(|row| row.index);
+        rows.sort_by_key(|row| (row.state.rank(), row.index));
         rows
     }
 
     /// The row for a source position.
     pub fn row(&self, index: usize) -> Option<&RenameRow> {
-        self.rows.iter().find(|row| row.index == index)
+        self.rows.get(index)
     }
 
     /// The sources the plan was made from, in their given order.
@@ -508,103 +556,180 @@ impl RenamePlan {
     }
 
     /// The count line, first in the dialog and first after every
-    /// recompute, the worst news inside 40 cells: "Rename 12 of 14: 2
-    /// conflicts"; "Rename 12 of 14: 2 problems" when not every problem
-    /// is a clash; "Rename 3 of 3: 1 needs care"; "Rename 47 of 50: no
-    /// problems"; "No name would change".
+    /// recompute, the worst news first and inside 40 cells
+    /// (`research/bulk-rename.md`): "2 problems. 46 of 50 files will
+    /// change."; "No problems, 3 need care. 47 of 50 change.";
+    /// "47 of 50 files will change. No problems."; "No file would
+    /// change."
     pub fn count_line(&self) -> String {
         let total = self.rows.len() as u64;
-        let renaming = self.renaming() as u64;
+        let renaming = grouped(self.renaming() as u64);
         let problems = self.problems() as u64;
-        let conflicts = self
-            .rows
-            .iter()
-            .filter(|row| row.state.is_conflict())
-            .count() as u64;
         let care = self.needs_care() as u64;
-        let head = format!("Rename {} of {}", grouped(renaming), grouped(total));
+        let files = if total == 1 { "file" } else { "files" };
+        let of = format!("{renaming} of {}", grouped(total));
         if problems > 0 {
-            let words = if conflicts == problems {
-                count(problems, "conflict", "conflicts")
-            } else {
-                count(problems, "problem", "problems")
-            };
-            format!("{head}: {}", grouped_words(&words, problems))
-        } else if renaming == 0 {
-            "No name would change".to_owned()
+            let words = if problems == 1 { "problem" } else { "problems" };
+            format!("{} {words}. {of} {files} will change.", grouped(problems))
+        } else if self.renaming() == 0 {
+            "No file would change.".to_owned()
         } else if care > 0 {
             let verb = if care == 1 { "needs" } else { "need" };
-            format!("{head}: {} {verb} care", grouped(care))
+            format!("No problems, {} {verb} care. {of} change.", grouped(care))
         } else {
-            format!("{head}: no problems")
+            format!("{of} {files} will change. No problems.")
         }
     }
 
     /// Why Apply cannot run, with the first problem, or `None` when it
-    /// can: "Cannot rename: 2 problems. First: name taken: a.txt becomes
-    /// b.txt".
+    /// can: "Cannot rename: 2 problems. First: name taken, a.txt becomes
+    /// b.txt."
     pub fn refusal_line(&self) -> Option<String> {
         let problems = self.problems() as u64;
         if problems == 0 {
             return (self.renaming() == 0).then(|| RenameRefused::NothingToRename.line());
         }
         let first = self.rows.iter().find(|row| row.state.is_problem())?;
-        let line = first.line();
-        let detail = line.strip_prefix("Problem, ").unwrap_or(&line);
         Some(format!(
-            "Cannot rename: {}. First: {detail}",
-            count(problems, "problem", "problems")
+            "Cannot rename: {}. First: {}.",
+            count(problems, "problem", "problems"),
+            first.detail()
         ))
     }
 
-    /// The confirmation's question, which starts on No: "Rename 12
-    /// items?"; "Rename 12 items, 1 needs care?".
+    /// The confirmation's question, which starts on No: "Rename 47 files
+    /// in D:\photos?"; "Rename 12 files in 3 folders, 1 needs care?".
     pub fn question(&self) -> String {
-        let items = count(self.renaming() as u64, "item", "items");
+        let files = count(self.renaming() as u64, "file", "files");
+        let mut folders: Vec<&Place> = Vec::new();
+        for row in self.rows.iter().filter(|row| row.state.renames()) {
+            if let Some(folder) = self.sources[row.index].place.parent().as_ref()
+                && let Some(known) = self.facts.keys().find(|f| *f == folder)
+                && !folders.contains(&known)
+            {
+                folders.push(known);
+            }
+        }
+        let place = match folders.as_slice() {
+            [one] => format!(" in {one}"),
+            [] => String::new(),
+            many => format!(" in {} folders", many.len()),
+        };
         match self.needs_care() {
-            0 => format!("Rename {items}?"),
-            1 => format!("Rename {items}, 1 needs care?"),
-            n => format!("Rename {items}, {n} need care?"),
+            0 => format!("Rename {files}{place}?"),
+            1 => format!("Rename {files}{place}, 1 needs care?"),
+            n => format!("Rename {files}{place}, {n} need care?"),
         }
     }
 
-    /// The position in [`RenamePlan::rows`] of the next problem row after
-    /// `after` (from the top when `None`), wrapping round; `None` when
-    /// there is none.
-    pub fn next_problem(&self, after: Option<usize>) -> Option<usize> {
-        let n = self.rows.len();
+    /// The position in `rows` of the next problem row after `after` (from
+    /// the top when `None`), wrapping round; `None` when there is none.
+    /// Works on either view's list of rows.
+    pub fn next_problem_in(rows: &[&RenameRow], after: Option<usize>) -> Option<usize> {
+        let n = rows.len();
         let start = after.map_or(0, |at| at + 1);
         (0..n)
             .map(|i| (start + i) % n)
-            .find(|&i| self.rows[i].state.is_problem())
+            .find(|&i| rows[i].state.is_problem())
     }
 
     /// The position of the problem row before `before`, wrapping round.
-    pub fn previous_problem(&self, before: Option<usize>) -> Option<usize> {
-        let n = self.rows.len();
+    pub fn previous_problem_in(rows: &[&RenameRow], before: Option<usize>) -> Option<usize> {
+        let n = rows.len();
         if n == 0 {
             return None;
         }
         let start = before.unwrap_or(0) + n;
         (1..=n)
             .map(|i| (start - i) % n)
-            .find(|&i| self.rows[i].state.is_problem())
+            .find(|&i| rows[i].state.is_problem())
     }
 
-    /// The renames the job will make, each source with its new name, in
-    /// the given order.
+    /// The next problem row after a source position in the given order.
+    pub fn next_problem(&self, after: Option<usize>) -> Option<usize> {
+        let rows: Vec<&RenameRow> = self.rows.iter().collect();
+        Self::next_problem_in(&rows, after)
+    }
+
+    /// The problem row before a source position in the given order.
+    pub fn previous_problem(&self, before: Option<usize>) -> Option<usize> {
+        let rows: Vec<&RenameRow> = self.rows.iter().collect();
+        Self::previous_problem_in(&rows, before)
+    }
+
+    /// The renames the job will make, each source with its new name: only
+    /// clean rows, deepest folder first (so each step's place is still
+    /// valid when a folder and its contents are both renamed), the given
+    /// order inside each depth.
     pub fn pairs(&self) -> Vec<(Place, String)> {
-        self.rows_in_order()
-            .into_iter()
-            .filter(|row| row.state.renames())
+        let mut rows: Vec<&RenameRow> =
+            self.rows.iter().filter(|row| row.state.renames()).collect();
+        rows.sort_by_key(|row| (std::cmp::Reverse(depth(&row.place)), row.index));
+        rows.into_iter()
             .map(|row| (row.place.clone(), row.new.clone()))
             .collect()
     }
 
-    /// The job request: every renaming row as a pair, and never an
-    /// overwrite (a clash the run meets is skipped and said, never
-    /// replaced). The engine orders the steps, takes temporary names for
-    /// swaps, rings and case-only changes, and keeps one undo record.
+    /// Make names unique: the choices that number every row that clashes,
+    /// the first of each clash keeping its name ("report (2).pdf"), for
+    /// the owner to review in the preview. Never applied on its own.
+    pub fn make_unique(&self) -> Choices {
+        let mut choices = self.choices.clone();
+        let fold = |folder: &Option<Place>, name: &str| match folder
+            .as_ref()
+            .and_then(|f| self.facts.get(f))
+        {
+            Some(facts) if facts.case_sensitive => name.to_owned(),
+            _ => name.to_lowercase(),
+        };
+        let folder_of = |row: &RenameRow| self.sources[row.index].place.parent();
+        let mut taken: HashSet<(Option<Place>, String)> = HashSet::new();
+        let old_keys: HashSet<(Option<Place>, String)> = self
+            .rows
+            .iter()
+            .map(|row| (folder_of(row), fold(&folder_of(row), &row.old)))
+            .collect();
+        for (folder, facts) in &self.facts {
+            let place = Some(folder.clone());
+            for name in &facts.names {
+                let key = (place.clone(), fold(&place, name));
+                if !old_keys.contains(&key) {
+                    taken.insert(key);
+                }
+            }
+        }
+        for row in &self.rows {
+            if !row.state.is_conflict() {
+                let folder = folder_of(row);
+                let name = if row.state.renames() {
+                    &row.new
+                } else {
+                    &row.old
+                };
+                taken.insert((folder.clone(), fold(&folder, name)));
+            }
+        }
+        for row in self.rows.iter().filter(|row| row.state.is_conflict()) {
+            let folder = folder_of(row);
+            if taken.insert((folder.clone(), fold(&folder, &row.new))) {
+                continue;
+            }
+            if let Some(name) = (2..10_000u32)
+                .map(|n| numbered_name(&row.new, n))
+                .find(|name| !taken.contains(&(folder.clone(), fold(&folder, name))))
+            {
+                taken.insert((folder.clone(), fold(&folder, &name)));
+                choices.edit(row.index, name);
+            }
+        }
+        choices
+    }
+
+    /// The job request: every clean row as a pair, deepest first, and
+    /// never an overwrite (a clash the run meets is skipped and said,
+    /// never replaced). The engine orders the steps, takes temporary
+    /// names for swaps and rings, renames a case-only change directly,
+    /// and keeps one undo record.
     pub fn request(&self, job: JobId) -> Result<JobRequest, RenameRefused> {
         if let Some(line) = self.refusal_line() {
             return Err(if self.problems() > 0 {
@@ -618,14 +743,6 @@ impl RenamePlan {
         let mut request = JobRequest::new(job, JobKind::Rename, sources).renaming(pairs);
         request.conflicts = ConflictPolicy::Skip;
         Ok(request)
-    }
-}
-
-/// A count in words with its number grouped: "1,204 conflicts".
-fn grouped_words(words: &str, n: u64) -> String {
-    match words.split_once(' ') {
-        Some((number, rest)) if number == n.to_string() => format!("{} {rest}", grouped(n)),
-        _ => words.to_owned(),
     }
 }
 
@@ -706,7 +823,11 @@ pub fn plan_rename_with(
                 Err(problem) => made = Err(problem),
             }
         }
-        if folder.is_none() {
+        if source.gone {
+            draft.blockers.push(Blocker::SourceGone);
+        } else if source.place.kind() == PlaceKind::Archive {
+            draft.blockers.push(Blocker::InArchive);
+        } else if folder.is_none() {
             draft.blockers.push(Blocker::NoFolder);
         } else if source.entry.name_not_unicode {
             draft.blockers.push(Blocker::NotUnicode);
@@ -753,7 +874,14 @@ pub fn plan_rename_with(
             // A refused issue the old name already had is kept as care:
             // the rename did not bring it, and the owner may be fixing
             // something else.
-            if issue.refused(&rules) && !before.contains(&issue) {
+            if let NameIssue::TooLong { max } = issue {
+                let length = if rules.length_in_utf16 {
+                    draft.new.encode_utf16().count()
+                } else {
+                    draft.new.len()
+                };
+                draft.blockers.push(Blocker::TooLong { length, max });
+            } else if issue.refused(&rules) && !before.contains(&issue) {
                 draft.blockers.push(Blocker::Name(issue));
             } else if !matches!(issue, NameIssue::CaseTwin(_)) {
                 draft.care.push(issue);
@@ -924,7 +1052,7 @@ pub fn plan_rename_with(
             },
             state,
             more,
-            edited: draft.edited,
+            edited: draft.edited && !choices.from_pairs,
             note: None,
         });
     }
@@ -976,12 +1104,51 @@ pub fn plan_rename_with(
     for (row, note) in rows.iter_mut().zip(notes) {
         row.note = note;
     }
-    rows.sort_by_key(|row| (row.state.rank(), row.index));
     Ok(RenamePlan {
         rows,
         sources: sources.to_vec(),
         recipe: recipe.clone(),
         choices: choices.clone(),
         portable: context.is_portable(),
+        facts,
     })
+}
+
+/// The pairs door: a caller (a script, a plugin, `diro rename
+/// --from-pairs`) gives each source with its new name, and gets the same
+/// rows, words and checks as the rules. Its rows carry no "Edited by you",
+/// since nobody edited them by hand.
+pub fn plan_pairs(pairs: &[(RenameSource, String)], context: &RenameContext<'_>) -> RenamePlan {
+    let sources: Vec<RenameSource> = pairs.iter().map(|(source, _)| source.clone()).collect();
+    let mut choices = Choices {
+        from_pairs: true,
+        ..Choices::default()
+    };
+    for (index, (_, name)) in pairs.iter().enumerate() {
+        choices.edit(index, name.clone());
+    }
+    match plan_rename_with(&sources, &Recipe::default(), context, &choices) {
+        Ok(plan) => plan,
+        // An empty recipe always compiles.
+        Err(_) => RenamePlan {
+            rows: Vec::new(),
+            sources,
+            recipe: Recipe::default(),
+            choices,
+            portable: context.is_portable(),
+            facts: HashMap::new(),
+        },
+    }
+}
+
+/// How many folders deep a place is, for ordering the pairs deepest
+/// first.
+fn depth(place: &Place) -> usize {
+    let mut depth = 0;
+    let mut at = place.parent();
+    while let Some(parent) = at {
+        depth += 1;
+        at = parent.parent();
+    }
+    depth
 }

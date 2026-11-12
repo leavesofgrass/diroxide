@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use diroxide_core::{Entry, EntryKind, JobId, Timestamp, UtcOffset};
+use diroxide_core::{Entry, EntryKind, JobId, Place, Timestamp, UtcOffset};
 use diroxide_vfs::names::NameRules;
 use proptest::prelude::*;
 
@@ -54,10 +54,7 @@ fn plan(names: &[&str], recipe: &Recipe) -> RenamePlan {
 }
 
 fn new_names(plan: &RenamePlan) -> Vec<String> {
-    plan.rows_in_order()
-        .iter()
-        .map(|row| row.new.clone())
-        .collect()
+    plan.rows().iter().map(|row| row.new.clone()).collect()
 }
 
 fn cells(line: &str) -> usize {
@@ -178,7 +175,7 @@ fn counters_restart_per_folder_and_skips_never_renumber() {
     let (sources, context) = files("/a", &["x.txt", "y.txt"], &[]);
     let skipped = plan_rename_with(&sources, &global, &context, &choices).unwrap();
     assert_eq!(new_names(&skipped), ["x.txt", "2.txt"]);
-    assert_eq!(skipped.rows()[1].line(), "Skipped by you: x.txt");
+    assert_eq!(skipped.rows()[0].line(), "Skipped by you: x.txt");
 }
 
 #[test]
@@ -195,18 +192,21 @@ fn a_missing_value_or_a_negative_counter_is_that_rows_problem() {
     let lookup = Exif;
     let plan = plan_rename(&sources, &recipe, &context.with_lookup(&lookup)).unwrap();
     assert_eq!(
-        plan.rows()[0].line(),
+        plan.rows()[1].line(),
         "Problem, no value for {meta:exif.date}: scan.jpg"
     );
-    assert_eq!(plan.rows()[1].new, "2026-11-01 IMG_1.jpg");
-    assert_eq!(plan.count_line(), "Rename 1 of 2: 1 problem");
+    assert_eq!(plan.rows()[0].new, "2026-11-01 IMG_1.jpg");
+    assert_eq!(plan.count_line(), "1 problem. 1 of 2 files will change.");
     let down = Recipe::of(vec![Rule::template("{counter}")]).counting(Counter {
         start: 0,
         step: -1,
         ..Counter::default()
     });
     let plan = self::plan(&["a.txt", "b.txt"], &down);
-    assert_eq!(plan.rows()[0].line(), "Problem, counter below zero: b.txt");
+    assert_eq!(
+        plan.rows()[1].line(),
+        "Problem, counter went below zero: b.txt"
+    );
 }
 
 #[test]
@@ -248,23 +248,23 @@ fn bad_recipes_are_refused_whole_with_the_rule_number() {
 #[test]
 fn the_count_line_leads_with_the_worst_news_inside_40_cells() {
     let none = plan(&["a.txt"], &Recipe::default());
-    assert_eq!(none.count_line(), "No name would change");
+    assert_eq!(none.count_line(), "No file would change.");
     assert_eq!(
         none.refusal_line().unwrap(),
-        "Nothing to rename: no name would change"
+        "Nothing to rename: no file would change."
     );
     let clean = plan(
         &["a.txt", "b.txt"],
         &Recipe::of(vec![Rule::replace("a", "c")]),
     );
-    assert_eq!(clean.count_line(), "Rename 1 of 2: no problems");
+    assert_eq!(clean.count_line(), "1 of 2 files will change. No problems.");
     assert!(clean.is_ready());
-    assert_eq!(clean.question(), "Rename 1 item?");
+    assert_eq!(clean.question(), format!("Rename 1 file in {}?", p("/a")));
     let clash = plan(
         &["1.txt", "2.txt", "3.txt", "keep.txt"],
         &Recipe::of(vec![Rule::pattern("^[0-9]$", "keep")]),
     );
-    assert_eq!(clash.count_line(), "Rename 0 of 4: 3 conflicts");
+    assert_eq!(clash.count_line(), "3 problems. 0 of 4 files will change.");
     let care = plan(
         &["a.txt", "b.txt"],
         &Recipe::of(vec![Rule::Insert {
@@ -273,21 +273,33 @@ fn the_count_line_leads_with_the_worst_news_inside_40_cells() {
             part: Part::Stem,
         }]),
     );
-    assert_eq!(care.count_line(), "Rename 2 of 2: 2 need care");
-    assert_eq!(care.question(), "Rename 2 items, 2 need care?");
+    assert_eq!(
+        care.count_line(),
+        "No problems, 2 need care. 2 of 2 change."
+    );
+    assert_eq!(
+        care.question(),
+        format!("Rename 2 files in {}, 2 need care?", p("/a"))
+    );
     let lines = [
         clash.count_line(),
         care.count_line(),
-        care.question(),
-        "Rename 100,000 of 100,000: 99,999 problems".to_owned(),
-        "Rename 100,000 of 100,000: 1 needs care".to_owned(),
+        clean.count_line(),
+        "2 problems. 46 of 50 files will change.".to_owned(),
+        "No problems, 3 need care. 47 of 50 change.".to_owned(),
+        "47 of 50 files will change. No problems.".to_owned(),
+        "1,000 problems. 9,000 of 10,000 files will change.".to_owned(),
     ];
-    for line in &lines[..3] {
-        assert!(cells(line) <= 40, "{line}: {}", cells(line));
-    }
-    // The longest a count line grows: past 40 only at six-digit batches.
-    assert_eq!(cells(&lines[3]), 42);
-    assert_eq!(cells(&lines[4]), 39);
+    let counts: Vec<usize> = lines.iter().map(|line| cells(line)).collect();
+    assert_eq!(counts, [37, 40, 38, 39, 42, 40, 50]);
+    // Past 40 cells, the problems and the first count still lead.
+    assert!(
+        lines[6]
+            .chars()
+            .take(40)
+            .collect::<String>()
+            .contains("9,000 of")
+    );
 }
 
 #[test]
@@ -307,10 +319,10 @@ fn clashes_with_rows_and_with_names_on_disk_are_problems_first() {
             "Problem, name taken: c.txt becomes taken.txt",
         ]
     );
-    assert_eq!(plan.count_line(), "Rename 0 of 3: 3 conflicts");
+    assert_eq!(plan.count_line(), "3 problems. 0 of 3 files will change.");
     assert_eq!(
         plan.refusal_line().unwrap(),
-        "Cannot rename: 3 problems. First: same new name as b.txt: a.txt becomes same.txt"
+        "Cannot rename: 3 problems. First: same new name as b.txt, a.txt becomes same.txt."
     );
     assert!(matches!(
         plan.request(JobId::new(1)),
@@ -340,7 +352,10 @@ fn a_row_that_cannot_change_keeps_its_name_and_others_clash_with_it() {
     // Portable names off: Linux takes a colon, so both go ahead in turn.
     let plan = plan_rename(&sources, &recipe, &context.clone().portable(false)).unwrap();
     assert_eq!(plan.problems(), 0);
-    assert_eq!(plan.count_line(), "Rename 2 of 2: 1 needs care");
+    assert_eq!(
+        plan.count_line(),
+        "No problems, 1 needs care. 2 of 2 change."
+    );
 }
 
 #[test]
@@ -369,8 +384,14 @@ fn names_not_allowed_are_said_in_words() {
         care.rows()[0].line(),
         "Care, has hidden characters: a.txt becomes a[U+200B].txt"
     );
-    assert_eq!(care.count_line(), "Rename 1 of 1: 1 needs care");
-    assert_eq!(care.question(), "Rename 1 item, 1 needs care?");
+    assert_eq!(
+        care.count_line(),
+        "No problems, 1 needs care. 1 of 1 change."
+    );
+    assert_eq!(
+        care.question(),
+        format!("Rename 1 file in {}, 1 needs care?", p("/a"))
+    );
     let mut odd = files("/a", &["x"], &[]).0;
     odd[0].entry.name_not_unicode = true;
     let plan = plan_rename(&odd, &recipe("y"), &RenameContext::new()).unwrap();
@@ -461,31 +482,190 @@ fn edited_rows_keep_their_names_across_new_recipes() {
 }
 
 #[test]
-fn the_editor_round_trip_refuses_a_changed_count_in_words() {
+fn the_keyed_editor_round_trip_reads_any_order_and_refuses_lost_lines() {
     let recipe = Recipe::of(vec![Rule::replace("IMG_", "trip-")]);
     let (sources, context) = files("/a", &["IMG_1.jpg", "IMG_2.jpg", "notes.txt"], &[]);
     let plan = plan_rename(&sources, &recipe, &context).unwrap();
-    let text = editor_text(&plan).unwrap();
+    let text = editor_text(&plan, EditorFormat::Keyed).unwrap();
+    assert_eq!(
+        text,
+        "trip-1.jpg (was IMG_1.jpg)\ntrip-2.jpg (was IMG_2.jpg)\nnotes.txt (was notes.txt)\n"
+    );
+    assert_eq!(cells("trip-01.jpg (was IMG_0001.jpg)"), 30);
+    // Reordered, one put back, one with " (was " in its new name.
+    let edited = "read (was it).txt (was notes.txt)\r\ntrip-2.jpg (was IMG_2.jpg)\nIMG_1.jpg (was IMG_1.jpg)\n";
+    let choices = read_editor_text(&plan, edited, EditorFormat::Keyed).unwrap();
+    assert_eq!(
+        choices.edited,
+        BTreeMap::from([
+            (0, "IMG_1.jpg".to_owned()),
+            (2, "read (was it).txt".to_owned())
+        ])
+    );
+    let again = plan_rename_with(&sources, &recipe, &context, &choices).unwrap();
+    assert_eq!(again.rows()[0].line(), "Same name: IMG_1.jpg");
+    assert_eq!(again.count_line(), "2 of 3 files will change. No problems.");
+    let lost = read_editor_text(
+        &plan,
+        "trip-1.jpg (was IMG_1.jpg)\nx.jpg\n",
+        EditorFormat::Keyed,
+    )
+    .unwrap_err();
+    assert_eq!(lost.line(), "Names not read: line 2 has no known (was ...)");
+    let twice = "a (was IMG_1.jpg)\nb (was IMG_1.jpg)\nc (was notes.txt)\n";
+    let twice = read_editor_text(&plan, twice, EditorFormat::Keyed).unwrap_err();
+    assert_eq!(twice, EditorRefused::UnknownKey(2));
+    let short = read_editor_text(&plan, "a (was IMG_1.jpg)\n", EditorFormat::Keyed).unwrap_err();
+    assert_eq!(short.line(), "Names not read: 2 files have no line");
+    let empty = read_editor_text(
+        &plan,
+        " (was IMG_1.jpg)\nb (was IMG_2.jpg)\nc (was notes.txt)",
+        EditorFormat::Keyed,
+    )
+    .unwrap_err();
+    assert_eq!(empty.line(), "Names not read: line 1 is empty");
+    for line in [lost.line(), short.line(), empty.line()] {
+        assert!(cells(&line) <= 46, "{line}");
+    }
+}
+
+#[test]
+fn the_plain_editor_round_trip_refuses_a_changed_count_in_words() {
+    let recipe = Recipe::of(vec![Rule::replace("IMG_", "trip-")]);
+    let (sources, context) = files("/a", &["IMG_1.jpg", "IMG_2.jpg", "notes.txt"], &[]);
+    let plan = plan_rename(&sources, &recipe, &context).unwrap();
+    let text = editor_text(&plan, EditorFormat::Plain).unwrap();
     assert_eq!(text, "trip-1.jpg\ntrip-2.jpg\nnotes.txt\n");
-    let fewer = read_editor_text(&plan, "trip-1.jpg\nnotes.txt\n").unwrap_err();
+    let fewer =
+        read_editor_text(&plan, "trip-1.jpg\nnotes.txt\n", EditorFormat::Plain).unwrap_err();
     assert_eq!(fewer.line(), "Names not read: 2 lines for 3 files");
-    assert!(cells(&fewer.line()) <= 40);
-    let empty = read_editor_text(&plan, "a\r\n\r\nb\r\n").unwrap_err();
+    assert_eq!(cells(&fewer.line()), 35);
+    let empty = read_editor_text(&plan, "a\r\n\r\nb\r\n", EditorFormat::Plain).unwrap_err();
     assert_eq!(empty.line(), "Names not read: line 2 is empty");
-    let choices = read_editor_text(&plan, "trip-1.jpg\nIMG_2.jpg\nread me.txt").unwrap();
+    let choices = read_editor_text(
+        &plan,
+        "trip-1.jpg\nIMG_2.jpg\nread me.txt",
+        EditorFormat::Plain,
+    )
+    .unwrap();
     assert_eq!(
         choices.edited,
         BTreeMap::from([(1, "IMG_2.jpg".to_owned()), (2, "read me.txt".to_owned())])
     );
-    let again = plan_rename_with(&sources, &recipe, &context, &choices).unwrap();
-    assert_eq!(again.count_line(), "Rename 2 of 3: no problems");
     let mut odd = sources.clone();
     odd[0].entry.name = "two\nlines.jpg".into();
     let plan = plan_rename(&odd, &recipe, &context).unwrap();
-    let refused = editor_text(&plan).unwrap_err();
+    let refused = editor_text(&plan, EditorFormat::Keyed).unwrap_err();
     assert_eq!(
         refused.line(),
         "Cannot edit: 2 names hold a line break or tab"
+    );
+}
+
+#[test]
+fn make_names_unique_numbers_the_later_rows_for_review() {
+    let (sources, context) = files("/a", &["1.txt", "2.txt", "3.txt"], &["report.txt"]);
+    let recipe = Recipe::of(vec![Rule::template("report")]);
+    let plan = plan_rename(&sources, &recipe, &context).unwrap();
+    assert_eq!(plan.problems(), 3);
+    let choices = plan.make_unique();
+    let fixed = plan_rename_with(&sources, &recipe, &context, &choices).unwrap();
+    assert_eq!(
+        fixed.rows().iter().map(RenameRow::line).collect::<Vec<_>>(),
+        [
+            "Edited by you: 1.txt becomes report (2).txt",
+            "Edited by you: 2.txt becomes report (3).txt",
+            "Edited by you: 3.txt becomes report (4).txt",
+        ]
+    );
+    assert_eq!(fixed.count_line(), "3 of 3 files will change. No problems.");
+    let (sources, context) = files("/a", &["a.txt", "b.txt"], &[]);
+    let same = plan_rename(&sources, &recipe, &context).unwrap();
+    let fixed = plan_rename_with(&sources, &recipe, &context, &same.make_unique()).unwrap();
+    assert_eq!(new_names(&fixed), ["report.txt", "report (2).txt"]);
+}
+
+#[test]
+fn the_pairs_door_gives_the_same_rows_without_edited_words() {
+    let (sources, context) = files("/a", &["a.txt", "b.txt"], &["c.txt"]);
+    let pairs = vec![
+        (sources[0].clone(), "b.txt".to_owned()),
+        (sources[1].clone(), "c.txt".to_owned()),
+    ];
+    let plan = plan_pairs(&pairs, &context);
+    assert_eq!(
+        plan.rows().iter().map(RenameRow::line).collect::<Vec<_>>(),
+        [
+            "Problem, name taken: a.txt becomes b.txt",
+            "Problem, name taken: b.txt becomes c.txt",
+        ]
+    );
+    let swap = plan_pairs(
+        &[
+            (sources[0].clone(), "b.txt".to_owned()),
+            (sources[1].clone(), "a.txt".to_owned()),
+        ],
+        &context,
+    );
+    assert_eq!(
+        swap.rows()[0].line(),
+        "Swap with b.txt: a.txt becomes b.txt"
+    );
+}
+
+#[test]
+fn gone_archived_and_overlong_sources_are_problems_in_words() {
+    let (mut sources, context) = files("/a", &["a.txt", "b.txt"], &[]);
+    sources[1] = sources[1].clone().gone();
+    let recipe = Recipe::of(vec![Rule::template("{stem}{stem}{stem}")]);
+    let plan = plan_rename(&sources, &recipe, &context).unwrap();
+    assert_eq!(plan.rows()[1].line(), "Problem, source is gone: b.txt");
+    let long = Recipe::of(vec![Rule::template("x".repeat(256))]);
+    let plan = plan_rename(&sources[..1], &long, &context).unwrap();
+    let line = plan.rows()[0].line();
+    assert!(
+        line.starts_with("Problem, too long (260 of 255): a.txt becomes xxx"),
+        "{line}"
+    );
+    let inner = Place::parse(&format!("{}!x.txt", p("/a/c.zip"))).unwrap();
+    let archived = [RenameSource::new(
+        inner,
+        Entry::new("x.txt", EntryKind::File),
+    )];
+    let plan = plan_rename(&archived, &recipe, &RenameContext::new()).unwrap();
+    assert_eq!(plan.rows()[0].line(), "Problem, inside an archive: x.txt");
+}
+
+#[test]
+fn pairs_go_deepest_first_and_the_problems_view_leads_with_problems() {
+    let folder = files("/a", &["sub"], &[]).0;
+    let mut sources = vec![RenameSource::new(
+        folder[0].place.clone(),
+        Entry::new("sub", EntryKind::Folder),
+    )];
+    sources.extend(files("/a/sub", &["x.txt", "y.txt"], &[]).0);
+    let recipe = Recipe::of(vec![Rule::pattern("^(sub|x)$", "new-$1")]);
+    let plan = plan_rename(&sources, &recipe, &RenameContext::new()).unwrap();
+    assert_eq!(
+        plan.pairs(),
+        vec![
+            (p("/a/sub/x.txt"), "new-x.txt".to_owned()),
+            (p("/a/sub"), "new-sub".to_owned()),
+        ]
+    );
+    let (sources, context) = files("/a", &["a.txt", "b.txt", "c.txt"], &["z.txt"]);
+    let recipe = Recipe::of(vec![Rule::pattern("^c$", "z")]);
+    let plan = plan_rename(&sources, &recipe, &context).unwrap();
+    let view: Vec<&str> = plan
+        .problems_first()
+        .iter()
+        .map(|row| row.old.as_str())
+        .collect();
+    assert_eq!(view, ["c.txt", "a.txt", "b.txt"]);
+    assert_eq!(plan.next_problem(None), Some(2));
+    assert_eq!(
+        RenamePlan::next_problem_in(&plan.problems_first(), None),
+        Some(0)
     );
 }
 
@@ -640,7 +820,7 @@ fn a_swap_runs_as_one_job_and_undoes_with_one_record() {
     let (plan, report, engine) = run(&fake, &sources, &recipe);
     let report = report.unwrap();
     assert!(report.failed.is_empty(), "{:?}", report.failed);
-    assert_eq!(plan.count_line(), "Rename 2 of 3: no problems");
+    assert_eq!(plan.count_line(), "2 of 3 files will change. No problems.");
     assert_eq!(fake.contents(&p("/a/a.txt")).unwrap(), b"b.txt");
     assert_eq!(fake.contents(&p("/a/b.txt")).unwrap(), b"a.txt");
     assert!(fake.unfinished().is_empty());
@@ -705,7 +885,7 @@ fn a_folder_that_changed_since_the_preview_refuses_the_run() {
     let refused = run_rename(&plan, &env).unwrap_err();
     assert_eq!(
         refused.line(),
-        "The folder changed since the preview: name taken: a.txt becomes b.txt"
+        "The folder changed since the preview: name taken, a.txt becomes b.txt."
     );
     assert_eq!(fake.contents(&p("/a/b.txt")).unwrap(), b"new");
     assert_eq!(fake.contents(&p("/a/a.txt")).unwrap(), b"a.txt");
