@@ -27,5 +27,6 @@ pub mod run;
 pub mod search;
 pub mod split;
 pub mod sum;
+pub mod sync;
 pub mod watch;
 pub mod watch_task;
