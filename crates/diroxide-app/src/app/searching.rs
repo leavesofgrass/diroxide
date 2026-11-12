@@ -107,6 +107,14 @@ pub(super) struct Search {
     label: Option<String>,
     /// The day newest files listed, for Earlier day.
     day: Option<diroxide_search::Day>,
+    /// What the list is (alpha 5, lane P5): a search's results, a
+    /// collection, the flat view, ...
+    kind: ListKind,
+    /// The panel and tab that asked for it: a list belongs to its tab.
+    owner: Option<(Side, u64)>,
+    /// Words said after a row's name, by the row's id: a duplicate's
+    /// "oldest", a compare's status.
+    notes: HashMap<String, String>,
 }
 
 /// The results lister taken off the dialog stack while the viewer shows
@@ -137,6 +145,8 @@ pub(super) struct SearchState {
     view_line: Option<u64>,
     /// The last search that can be saved, with the name offered for it.
     last: Option<(String, SearchQuery)>,
+    /// "Replaces the search results." was said once this session.
+    replaced_said: bool,
 }
 
 /// A search command of this module.
@@ -662,6 +672,9 @@ impl App {
             removed: HashSet::new(),
             label: None,
             day: None,
+            kind: ListKind::Search,
+            owner: Some((self.active, self.panel(self.active).tab_id())),
+            notes: HashMap::new(),
         }));
         self.searching.parked.clear();
         let list = self.results_model();
@@ -723,6 +736,9 @@ impl App {
             removed: HashSet::new(),
             label: None,
             day: None,
+            kind: ListKind::Search,
+            owner: Some((self.active, self.panel(self.active).tab_id())),
+            notes: HashMap::new(),
         }));
         self.searching.parked.clear();
         id
@@ -759,6 +775,7 @@ impl App {
         if let Some((title, day)) = newest {
             search.title = title;
             search.day = day;
+            search.kind = ListKind::Newest;
         }
         let title = search.title.clone();
         let rows = match self.searching.current.as_ref() {
@@ -838,6 +855,9 @@ impl App {
             removed: HashSet::new(),
             label: Some(label.to_owned()),
             day: None,
+            kind: ListKind::Labels,
+            owner: Some((self.active, self.panel(self.active).tab_id())),
+            notes: HashMap::new(),
         }));
         self.searching.parked.clear();
         let list = self.results_model();
@@ -950,9 +970,16 @@ impl App {
     fn result_row(search: &Search, hit: &SearchHit) -> ListRow {
         let row = hit.row(search.root.as_ref());
         let gone = search.stale.get(&hit.id()) == Some(&Freshness::Gone);
-        if search.label.is_some() && gone {
+        if (search.label.is_some() || search.kind.trash_removes_item()) && gone {
             let mut details = vec!["missing".to_owned()];
             details.push(hit.folder_words(None));
+            return ListRow::new(row.id, row.label).with_details(details);
+        }
+        // The list's own words after the name (alpha 5): a duplicate's
+        // "oldest", a compare's status.
+        if let Some(note) = search.notes.get(&row.id) {
+            let mut details = vec![note.clone()];
+            details.extend(row.details.iter().cloned());
             return ListRow::new(row.id, row.label).with_details(details);
         }
         row
@@ -1220,6 +1247,7 @@ impl App {
             id if id == ids::COPY => self.result_job(JobKind::Copy),
             id if id == ids::MOVE => self.result_job(JobKind::Move),
             id if id == ids::TRASH && self.labeled_label().is_some() => self.unlabel_result(),
+            id if id == ids::TRASH && self.list_collection().is_some() => self.uncollect_result(),
             id if id == ids::TRASH => self.result_job(JobKind::Trash),
             id if id == ids::DELETE_PERMANENTLY => self.result_job(JobKind::DeletePermanently),
             id if id == ids::SELECT_TOGGLE => self.toggle_result_mark(),
@@ -1763,5 +1791,249 @@ impl App {
             None => String::new(),
         };
         Some(format!("{state}. {focus}"))
+    }
+}
+
+/// What a list in the results lister is (alpha 5, the pre-wiring step,
+/// lane P5): the results of a search, and the lists that are not folders
+/// (question 130). It decides the words of the list's rows and what the
+/// trash key does in it; the title and the start line are the opener's.
+/// One list at a time: opening one replaces the last.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(
+    dead_code,
+    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+)]
+pub(crate) enum ListKind {
+    /// A search's results: Find files, a saved search, the largest items.
+    Search,
+    /// A label's items, from the Labels list: the trash key takes the
+    /// label off.
+    Labels,
+    /// The newest files of a day.
+    Newest,
+    /// The flat view of a folder (lane LA).
+    Flat,
+    /// A collection, by its name: the trash key takes the item out of the
+    /// collection and touches no file (lane LA).
+    Collection(String),
+    /// The recent files (lane LA).
+    Recent,
+    /// A folder compare's files (lane SA).
+    Compared,
+    /// One duplicate group's members (lane DA).
+    DuplicateGroup,
+}
+
+#[allow(
+    dead_code,
+    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+)]
+impl ListKind {
+    /// What the list is, in words, for a sentence: "search results", "the
+    /// collection Trip photos".
+    pub(crate) fn words(&self) -> String {
+        match self {
+            ListKind::Search => "search results".to_owned(),
+            ListKind::Labels => "a label's items".to_owned(),
+            ListKind::Newest => "newest files".to_owned(),
+            ListKind::Flat => "the flat view".to_owned(),
+            ListKind::Collection(name) => format!("the collection {name}"),
+            ListKind::Recent => "recent files".to_owned(),
+            ListKind::Compared => "the compared files".to_owned(),
+            ListKind::DuplicateGroup => "a duplicate group".to_owned(),
+        }
+    }
+
+    /// Whether the trash key takes the focused item out of the list's
+    /// store instead of sending the file to the trash.
+    pub(crate) fn trash_removes_item(&self) -> bool {
+        matches!(self, ListKind::Labels | ListKind::Collection(_))
+    }
+}
+
+/// A list to open in the results lister ([`App::open_list`]).
+#[derive(Clone, Debug)]
+#[allow(
+    dead_code,
+    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+)]
+pub(crate) struct ListOpen {
+    /// What it is.
+    pub kind: ListKind,
+    /// The panel that asked; the list belongs to its shown tab.
+    pub side: Side,
+    /// The list's name, said when it opens: "Trip photos, collection".
+    pub title: String,
+    /// The folder the rows' "in b/deep" words start from, when there is
+    /// one (the flat view's root).
+    pub root: Option<Place>,
+    /// The rows' files, in the list's order.
+    pub hits: Vec<SearchHit>,
+    /// Places in the list that are gone: their rows say "missing".
+    pub gone: Vec<Place>,
+    /// Words after a row's name, by place: "oldest", "Different".
+    pub notes: Vec<(Place, String)>,
+    /// The line said as it opens, its count first: "Trip photos,
+    /// collection, 3 items".
+    pub start: String,
+    /// Whether more rows come later ([`App::search_found`] with the
+    /// returned number); else the list is complete as given.
+    pub streaming: bool,
+}
+
+/// Said once a session when another list replaces a search's results: 28
+/// cells.
+#[allow(
+    dead_code,
+    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+)]
+pub(crate) const REPLACES_RESULTS: &str = "Replaces the search results.";
+
+impl App {
+    /// Opens a list in the results lister, in place of the last search's
+    /// results or list (one list at a time, question 130): its rows, its
+    /// title, its start line; "Replaces the search results." is said once
+    /// a session when a search's results were there. Returns the effects
+    /// and the list's number, which [`App::search_found`] and
+    /// [`App::finish_results`] take for a list that streams. Every key of
+    /// the lister works on it: Enter, the view and edit keys, Copy, Move,
+    /// the trash key (a collection's item leaves the collection; a label's
+    /// item loses the label), Show in its folder, Remove from results and
+    /// the refining filter.
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    pub(crate) fn open_list(&mut self, open: ListOpen) -> (Vec<Effect>, u64) {
+        let replaces = !self.searching.replaced_said
+            && open.kind != ListKind::Search
+            && self
+                .searching
+                .current
+                .as_ref()
+                .is_some_and(|s| s.kind == ListKind::Search && !s.hits.is_empty());
+        self.searching.next += 1;
+        let id = self.searching.next;
+        let mut stale = HashMap::new();
+        let mut hits = open.hits;
+        for place in &open.gone {
+            let name = place.name().unwrap_or_default().to_owned();
+            let entry = Entry::new(name, diroxide_core::EntryKind::File);
+            let hit = SearchHit::new(place.clone(), entry);
+            stale.insert(hit.id(), Freshness::Gone);
+            hits.push(hit);
+        }
+        // A row's id is its place for a hit without a line.
+        let notes = open
+            .notes
+            .into_iter()
+            .map(|(place, note)| (place.to_string(), note))
+            .collect();
+        let found = hits.len() as u64;
+        self.searching.current = Some(Box::new(Search {
+            id,
+            root: open.root,
+            title: open.title,
+            hits,
+            running: open.streaming,
+            paused: false,
+            found,
+            summary: None,
+            said_at: Some(self.now()),
+            refine: None,
+            stale,
+            removed: HashSet::new(),
+            label: None,
+            day: None,
+            kind: open.kind,
+            owner: Some((open.side, self.panel(open.side).tab_id())),
+            notes,
+        }));
+        self.searching.parked.clear();
+        if !open.streaming {
+            self.searching.stale_at = Some(self.now());
+        }
+        let list = self.results_model();
+        let mut effects = self.open_dialog_saying(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::SEARCH_RESULTS),
+            },
+            Purpose::Results,
+            Message::info(open.start),
+        );
+        if replaces {
+            self.searching.replaced_said = true;
+            effects.push(self.say(Message::info(REPLACES_RESULTS)));
+        }
+        (effects, id)
+    }
+
+    /// What the list on the screen is, when one is.
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    pub(crate) fn list_kind(&self) -> Option<&ListKind> {
+        self.searching.current.as_ref().map(|s| &s.kind)
+    }
+
+    /// The panel and tab the list belongs to.
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    pub(crate) fn list_owner(&self) -> Option<(Side, u64)> {
+        self.searching.current.as_ref()?.owner
+    }
+
+    /// The collection whose items the list shows, when it is one.
+    fn list_collection(&self) -> Option<String> {
+        match &self.searching.current.as_ref()?.kind {
+            ListKind::Collection(name) => Some(name.clone()),
+            _ => None,
+        }
+    }
+
+    /// The trash key in a collection's list: the focused item leaves the
+    /// collection through lane LA's [`App::collection_remove_items`], and
+    /// its row leaves the list once that says so. No file is touched.
+    fn uncollect_result(&mut self) -> Vec<Effect> {
+        let Some(name) = self.list_collection() else {
+            return Vec::new();
+        };
+        let Some(row) = self.top_row_id() else {
+            return Vec::new();
+        };
+        let Some(hit) = self.hit_of(&row) else {
+            return Vec::new();
+        };
+        self.collection_remove_items(&name, vec![hit.place])
+    }
+
+    /// Takes rows out of the list on the screen by their places, as Remove
+    /// from results does, for a list whose store dropped them.
+    #[allow(
+        dead_code,
+        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
+    )]
+    pub(crate) fn list_remove_places(&mut self, places: &[Place]) -> Vec<Effect> {
+        let Some(search) = self.searching.current.as_mut() else {
+            return Vec::new();
+        };
+        for hit in &search.hits {
+            if places.contains(&hit.place) {
+                search.removed.insert(hit.id());
+            }
+        }
+        let rows = match self.searching.current.as_ref() {
+            Some(search) => self.result_rows(search),
+            None => Vec::new(),
+        };
+        if let Some(list) = self.results_list_mut() {
+            list.set_rows(rows);
+        }
+        vec![Effect::Redraw(Redraw::All)]
     }
 }

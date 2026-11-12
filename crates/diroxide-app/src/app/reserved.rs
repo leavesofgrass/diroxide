@@ -99,6 +99,90 @@ mod tests {
             .collect()
     }
 
+    fn announced(effects: Vec<Effect>) -> Vec<String> {
+        effects
+            .into_iter()
+            .filter_map(|effect| match effect {
+                Effect::Announce(message) => Some(message.text),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The general results lister: any list opens in it, says it replaces
+    /// a search's results once a session, shows the list's own words after
+    /// a name and "missing" for a gone item, and in a collection the trash
+    /// key goes to lane LA's removal, never to the trash.
+    #[test]
+    fn the_general_lister_opens_any_list_in_the_results_lister() {
+        use diroxide_core::{Entry, EntryKind, Key, Side};
+        use diroxide_search::SearchHit;
+
+        use crate::app::searching::{ListKind, ListOpen, REPLACES_RESULTS};
+
+        let (mut app, mut runtime) = started();
+        let file = here().join("Cargo.toml").unwrap();
+        let gone = here().join("gone.txt").unwrap();
+        let open = |kind: ListKind, start: &str| ListOpen {
+            kind,
+            side: Side::Left,
+            title: "Trip photos, collection".to_owned(),
+            root: Some(here()),
+            hits: vec![SearchHit::new(
+                file.clone(),
+                Entry::new("Cargo.toml", EntryKind::File),
+            )],
+            gone: vec![gone.clone()],
+            notes: vec![(file.clone(), "oldest".to_owned())],
+            start: start.to_owned(),
+            streaming: false,
+        };
+        let (effects, _) = app.open_list(open(ListKind::Search, "2 found"));
+        assert_eq!(
+            announced(runtime.run_until_idle(&mut app, effects)),
+            ["2 found"]
+        );
+        let effects = app.dialog_escape();
+        runtime.run_until_idle(&mut app, effects);
+
+        let start = "Trip photos, collection, 2 items";
+        assert_eq!(start.chars().count(), 32);
+        let kind = ListKind::Collection("Trip photos".to_owned());
+        let (effects, _) = app.open_list(open(kind.clone(), start));
+        let said = announced(runtime.run_until_idle(&mut app, effects));
+        assert_eq!(said, [start, REPLACES_RESULTS]);
+        assert_eq!(REPLACES_RESULTS.chars().count(), 28);
+        assert_eq!(app.list_kind(), Some(&kind));
+        assert_eq!(app.list_owner().map(|(side, _)| side), Some(Side::Left));
+        let rows = match app.dialogs.last() {
+            Some((_, crate::dialog::Dialog::Choose { list, .. })) => list.rows().to_vec(),
+            _ => panic!("the results lister is not open"),
+        };
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].details.first().map(String::as_str), Some("oldest"));
+        assert_eq!(rows[1].details.first().map(String::as_str), Some("missing"));
+        // The trash key in a collection: lane LA's removal, not the trash.
+        let effects = app.handle(crate::app::AppEvent::Key(Key::parse("delete").unwrap()));
+        let said = announced(runtime.run_until_idle(&mut app, effects));
+        assert_eq!(said, [format!("{NOT_BUILT}Remove from collection.")]);
+        let effects = app.dialog_escape();
+        runtime.run_until_idle(&mut app, effects);
+
+        // Said once a session only.
+        let (effects, _) = app.open_list(open(ListKind::Search, "2 found"));
+        runtime.run_until_idle(&mut app, effects);
+        let effects = app.dialog_escape();
+        runtime.run_until_idle(&mut app, effects);
+        let (effects, _) = app.open_list(open(ListKind::Flat, "Flat view on, 2 files"));
+        let said = announced(runtime.run_until_idle(&mut app, effects));
+        assert_eq!(said, ["Flat view on, 2 files"]);
+        let effects = app.list_remove_places(std::slice::from_ref(&file));
+        runtime.run_until_idle(&mut app, effects);
+        assert!(ListKind::Collection(String::new()).trash_removes_item());
+        assert!(!ListKind::Flat.trash_removes_item());
+        assert_eq!(kind.words(), "the collection Trip photos");
+    }
+
     #[test]
     fn every_reserved_command_is_in_the_catalog_and_answers() {
         let (mut app, mut runtime) = started();

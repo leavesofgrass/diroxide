@@ -7,11 +7,12 @@
 //! catalog rows and menu items, this dispatch, the dialogs' [`ListsWants`]
 //! hosted under `Wants::Lists`, [`crate::lists::ListsNote`] (an
 //! [`AppEvent`](crate::AppEvent) variant), [`crate::lists::ListsAsk`] (a
-//! [`Request`](crate::Request) variant). Every function
+//! [`Request`](crate::Request) variant), and the trash key in a
+//! collection's list ([`App::collection_remove_items`]). Every function
 //! says "Not built yet: NAME." until lane LA fills it; LA works in this
 //! file, `flat.rs`, `recent.rs`, `crate::lists` and `runtime/lists.rs`.
 
-use diroxide_core::{Command, CommandId};
+use diroxide_core::{Command, CommandId, Message, Place};
 
 use super::{App, Effect};
 use crate::commands::ids;
@@ -95,6 +96,22 @@ impl App {
     /// Remove missing items, in a collection's list.
     fn collection_remove_missing(&mut self, command: &Command) -> Vec<Effect> {
         self.not_built(&command.id)
+    }
+
+    /// The trash key in a collection's list: these items leave the
+    /// collection and no file is touched ("Removed 1 from Trip photos.",
+    /// then "The file was not touched."). The general results lister
+    /// calls it for `ListKind::Collection`.
+    pub(super) fn collection_remove_items(
+        &mut self,
+        _collection: &str,
+        _places: Vec<Place>,
+    ) -> Vec<Effect> {
+        // "Not built yet: Remove from collection." (39 cells).
+        vec![self.say(Message::info(format!(
+            "{}Remove from collection.",
+            super::reserved::NOT_BUILT
+        )))]
     }
 
     /// Enter or a typed answer in one of these dialogs.
