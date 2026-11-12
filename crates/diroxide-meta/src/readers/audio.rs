@@ -288,46 +288,61 @@ fn property_fields(file: &TaggedFile) -> Vec<Field> {
     let mut fields = Vec::new();
     let length = properties.duration();
     if !length.is_zero() {
-        fields.push(Field::new(
-            "audio.length",
-            "Length",
-            duration_words(length),
-            DetailGroup::Content,
-        ));
+        fields.push(
+            Field::new(
+                "audio.length",
+                "Length",
+                duration_words(length),
+                DetailGroup::Content,
+            )
+            .sorted_by_length(length),
+        );
     }
     if let Some(rate) = properties.audio_bitrate().or(properties.overall_bitrate())
         && rate > 0
     {
-        fields.push(Field::new(
-            "audio.bitrate",
-            "Bit rate",
-            bitrate_words(rate),
-            DetailGroup::Technical,
-        ));
+        fields.push(
+            Field::new(
+                "audio.bitrate",
+                "Bit rate",
+                bitrate_words(rate),
+                DetailGroup::Technical,
+            )
+            .sorted_by(i64::from(rate)),
+        );
     }
     if let Some(hz) = properties.sample_rate().filter(|hz| *hz > 0) {
-        fields.push(Field::new(
-            "audio.sample_rate",
-            "Sample rate",
-            sample_rate_words(hz),
-            DetailGroup::Technical,
-        ));
+        fields.push(
+            Field::new(
+                "audio.sample_rate",
+                "Sample rate",
+                sample_rate_words(hz),
+                DetailGroup::Technical,
+            )
+            .sorted_by(i64::from(hz)),
+        );
     }
     if let Some(channels) = properties.channels().filter(|c| *c > 0) {
-        fields.push(Field::new(
-            "audio.channels",
-            "Channels",
-            channels_words(channels),
-            DetailGroup::Technical,
-        ));
+        fields.push(
+            Field::new(
+                "audio.channels",
+                "Channels",
+                channels_words(channels),
+                DetailGroup::Technical,
+            )
+            .sorted_by(i64::from(channels)),
+        );
     }
     if let Some(depth) = properties.bit_depth().filter(|d| *d > 0) {
-        fields.push(Field::new(
-            "audio.bit_depth",
-            "Bit depth",
-            format!("{depth}-bit"),
-            DetailGroup::Technical,
-        ));
+        fields.push(
+            Field::new(
+                "audio.bit_depth",
+                "Bit depth",
+                format!("{depth}-bit"),
+                DetailGroup::Technical,
+            )
+            .sorted_by(i64::from(depth)),
+        );
     }
     let pictures: Vec<_> = file.tags().iter().flat_map(Tag::pictures).collect();
     if !pictures.is_empty() {

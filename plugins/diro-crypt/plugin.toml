@@ -40,9 +40,14 @@ command = ["./diro-crypt.exe"]
 [timeouts]
 command = "none"
 
-# The plugin reads the files it is given and writes each result beside
-# its file itself, through the same committing writer diroxide's jobs use;
-# it asks the host for nothing but questions, forms and progress.
+# The plugin reads the files it is given and writes each result to a
+# stage diroxide hands out beside its file (fs/stage); diroxide moves it
+# into place, never over a file, and keeps it in the command's Undo
+# (fs/commit). fs = "write" is for those two calls only; beyond them it
+# asks the host for questions, forms and progress.
+[permissions]
+fs = "write"
+
 [permissions.declared]
 network = "none"
 files = "the files you choose; each result is written beside its file"

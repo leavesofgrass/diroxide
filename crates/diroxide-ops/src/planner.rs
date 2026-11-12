@@ -403,15 +403,39 @@ impl<'a> Planner<'a> {
     /// then remove each emptied folder, deepest first.
     fn moving(&mut self) -> Result<(), OpsError> {
         let folder = self.destination()?;
+        let request = self.request;
+        let whole_count = self.moving_into(&folder, &request.sources, false)?;
+        self.plan.facts.counted = whole_count;
+        Ok(())
+    }
+
+    /// The move of `sources` into `folder`, its steps added to the plan;
+    /// with `new_folder`, the folder is not there yet and is made first,
+    /// on its parent's drive. Whether every entry was counted whole.
+    fn moving_into(
+        &mut self,
+        folder: &Place,
+        sources: &[Place],
+        new_folder: bool,
+    ) -> Result<bool, OpsError> {
+        let folder = folder.clone();
         let dest_provider = self.provider(&folder)?;
-        let dest_entry = self.folder(&folder)?;
+        let dest_entry = if new_folder {
+            let parent = folder.parent().ok_or(OpsError::NoDestination)?;
+            let entry = self.folder(&parent)?;
+            self.plan.steps.push(Step::MakeFolder {
+                place: folder.clone(),
+            });
+            entry
+        } else {
+            self.folder(&folder)?
+        };
         let mut whole_count = true;
         let mut written = 0u64;
         let mut files = Vec::new();
         let mut targets = Vec::new();
         let mut crosses = false;
-        let request = self.request;
-        for source in &request.sources {
+        for source in sources {
             self.anchor(source, Removal::Recoverable)?;
             let name = Self::name_of(source)?;
             let source_provider = self.provider(source)?;
@@ -486,14 +510,13 @@ impl<'a> Planner<'a> {
                     .map(|(_, place)| Step::RemoveEmptyFolder { place }),
             );
         }
-        self.plan.facts.counted = whole_count;
         self.plan.facts.destination = Some(folder.clone());
         let rules = NameRules::from_capabilities(&dest_provider.capabilities(&folder));
         self.check_target_names(&rules, &targets);
         if crosses {
             self.check_room(&*dest_provider, &folder, written, &files);
         }
-        Ok(())
+        Ok(whole_count)
     }
 
     /// To the trash: one step per selected item, the trash unit; folders
@@ -988,6 +1011,58 @@ impl Engine {
             .collect::<Result<_, _>>()?;
         let mut plan = self.plan(&frozen)?;
         plan.note = selection.focus_note();
+        Ok(plan)
+    }
+
+    /// Plans one move job into several folders (lane AP's request 3:
+    /// Move into month folders): `moves` gives each source with the folder
+    /// it goes into; they are grouped by folder in their first order, a
+    /// folder that is not there is made first, and each group is planned
+    /// by the move planner, so cross-drive moves, merges, names and room
+    /// are checked as for any move. The plugins' before-move hooks hear
+    /// the whole plan once, as for [`Engine::plan_with`]. The request
+    /// gives the job's id, origin, conflicts and errors, and its
+    /// destination (the folder said in the plan, as the panel's); its
+    /// sources are not used. A synchronize plan (`crate::sync`) is a
+    /// different job; this is only moves.
+    pub fn plan_moves(
+        &self,
+        request: &JobRequest,
+        moves: &[(Place, Place)],
+        control: &JobControl,
+        sink: &dyn JobSink,
+    ) -> Result<Plan, OpsError> {
+        if request.kind != JobKind::Move {
+            return Err(OpsError::NotBuilt(request.kind.verb().to_owned()));
+        }
+        if moves.is_empty() {
+            return Err(OpsError::NothingSelected);
+        }
+        let mut groups: Vec<(Place, Vec<Place>)> = Vec::new();
+        for (source, folder) in moves {
+            match groups.iter_mut().find(|(f, _)| f == folder) {
+                Some((_, sources)) => sources.push(source.clone()),
+                None => groups.push((folder.clone(), vec![source.clone()])),
+            }
+        }
+        let mut planner = Planner::new(self, request, control, sink);
+        let mut whole = true;
+        for (folder, sources) in &groups {
+            let there = match planner.stat(folder) {
+                Ok(_) => true,
+                Err(OpsError::Vfs(VfsError::NotFound)) => false,
+                Err(error) => return Err(error),
+            };
+            whole &= planner.moving_into(folder, sources, !there)?;
+        }
+        let mut plan = planner.finish();
+        plan.facts.counted = whole;
+        plan.facts.items = moves.len() as u64;
+        plan.facts.destination = request
+            .destination
+            .clone()
+            .or_else(|| groups.first().and_then(|(folder, _)| folder.parent()));
+        plan.facts.hook_warnings = self.before_hooks(&plan, control)?;
         Ok(plan)
     }
 

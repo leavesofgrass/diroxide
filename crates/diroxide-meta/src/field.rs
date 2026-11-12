@@ -19,6 +19,11 @@ pub struct Field {
     /// Whether it is private (a location, a camera serial): left out of
     /// Copy details unless asked, and named by Check before sharing.
     pub private: bool,
+    /// The value as a number for sorting, in the field's own unit
+    /// (milliseconds for a length, bytes for a size, a plain count for
+    /// pages and lines), so "2 min" sorts after "45 sec" and "1.2 GB"
+    /// after "300 MB". `None` sorts by the words.
+    pub sort: Option<i64>,
 }
 
 impl Field {
@@ -35,6 +40,7 @@ impl Field {
             value: value.into(),
             group,
             private: false,
+            sort: None,
         }
     }
 
@@ -42,6 +48,53 @@ impl Field {
     pub fn private(mut self) -> Self {
         self.private = true;
         self
+    }
+
+    /// The same field with a number to sort by, in its own unit.
+    pub fn sorted_by(mut self, number: i64) -> Self {
+        self.sort = Some(number);
+        self
+    }
+
+    /// The same field sorting by a count or size that may not fit an
+    /// `i64`: the largest `i64` then, which still sorts last.
+    pub fn sorted_by_count(self, number: u64) -> Self {
+        self.sorted_by(i64::try_from(number).unwrap_or(i64::MAX))
+    }
+
+    /// The same field sorting by a length of time, in milliseconds.
+    pub fn sorted_by_length(self, length: std::time::Duration) -> Self {
+        self.sorted_by(i64::try_from(length.as_millis()).unwrap_or(i64::MAX))
+    }
+
+    /// A key that sorts as plain text in the field's true order, for a
+    /// caller that keeps cells as strings: a number becomes `n` and 20
+    /// digits (offset so a negative sorts first), words become `t` and
+    /// the value in small letters, so every number sorts before words.
+    pub fn sort_key(&self) -> String {
+        match self.sort {
+            Some(number) => {
+                let offset = i128::from(number) - i128::from(i64::MIN);
+                format!("n{offset:020}")
+            }
+            None => format!("t{}", self.value.to_lowercase()),
+        }
+    }
+
+    /// Compares two fields' values in their true order: by number when
+    /// both have one, a number before words, else by the words with
+    /// small and capital letters alike.
+    pub fn compare(&self, other: &Field) -> std::cmp::Ordering {
+        match (self.sort, other.sort) {
+            (Some(a), Some(b)) => a.cmp(&b),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => self
+                .value
+                .to_lowercase()
+                .cmp(&other.value.to_lowercase())
+                .then_with(|| self.value.cmp(&other.value)),
+        }
     }
 
     /// The field as a row of the details view.
@@ -190,6 +243,42 @@ mod tests {
         for line in &lines {
             assert!(line.chars().count() <= 40, "{line}");
         }
+    }
+
+    #[test]
+    fn lengths_and_sizes_sort_as_numbers_not_words() {
+        use std::time::Duration;
+        let length = |secs: u64, words: &str| {
+            Field::new("audio.length", "Length", words, DetailGroup::Content)
+                .sorted_by_length(Duration::from_secs(secs))
+        };
+        let mut fields = [
+            length(120, "2 min"),
+            length(45, "45 sec"),
+            length(3720, "1 hr 2 min"),
+            Field::new("audio.length", "Length", "odd", DetailGroup::Content),
+            length(0, "under 1 sec"),
+        ];
+        fields.sort_by(Field::compare);
+        let said: Vec<&str> = fields.iter().map(|f| f.value.as_str()).collect();
+        assert_eq!(
+            said,
+            ["under 1 sec", "45 sec", "2 min", "1 hr 2 min", "odd"]
+        );
+        let mut keys: Vec<String> = fields.iter().map(Field::sort_key).collect();
+        let before = keys.clone();
+        keys.sort();
+        assert_eq!(keys, before, "the text keys keep the same order");
+        let low = Field::new("x.n", "N", "-5", DetailGroup::Content).sorted_by(-5);
+        let high = Field::new("x.n", "N", "7", DetailGroup::Content).sorted_by(7);
+        assert!(low.sort_key() < high.sort_key());
+        let huge = Field::new("x.n", "N", "big", DetailGroup::Content).sorted_by_count(u64::MAX);
+        assert_eq!(huge.sort, Some(i64::MAX));
+        assert!(high.sort_key() < huge.sort_key());
+        assert_eq!(
+            Field::new("x.n", "N", "Words", DetailGroup::Content).sort_key(),
+            "twords"
+        );
     }
 
     #[test]

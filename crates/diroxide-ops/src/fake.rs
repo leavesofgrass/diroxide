@@ -278,6 +278,9 @@ struct State {
     seeks: u32,
     next_inode: u64,
     next_token: u32,
+    /// Extended items by the entry's key, then the item's name. They stay
+    /// with the key: a moved entry leaves them behind.
+    extended: BTreeMap<String, BTreeMap<String, Vec<u8>>>,
 }
 
 /// An in-memory provider for tests. Its places are local places in the
@@ -611,6 +614,27 @@ impl FakeProvider {
         if let Some(node) = self.state().nodes.get_mut(&key) {
             node.entry.attributes = Some(attributes);
         }
+    }
+
+    /// Sets one extended item of an entry directly, as another program
+    /// would.
+    pub fn set_extended_now(&self, place: &Place, name: &str, value: &[u8]) {
+        let key = self.node_key(place);
+        self.state()
+            .extended
+            .entry(key)
+            .or_default()
+            .insert(name.to_owned(), value.to_vec());
+    }
+
+    /// The bytes of one extended item of an entry, when it has it.
+    pub fn extended_now(&self, place: &Place, name: &str) -> Option<Vec<u8>> {
+        let key = self.node_key(place);
+        self.state()
+            .extended
+            .get(&key)
+            .and_then(|items| items.get(name))
+            .cloned()
     }
 
     /// Removes an entry and everything inside it at once, as another
@@ -1329,6 +1353,10 @@ impl Provider for FakeProvider {
         Some(self)
     }
 
+    fn as_extended(&self) -> Option<&dyn diroxide_vfs::ExtendedAttributes> {
+        Some(self)
+    }
+
     fn create_dir(&self, place: &Place, ctx: &OpContext) -> Result<(), VfsError> {
         self.enter(FakeCall::CreateDir, place, ctx)?;
         if self.exists(place) {
@@ -1634,6 +1662,84 @@ impl Provider for FakeProvider {
             total: None,
             max_file_size: switches.max_file_size,
         })
+    }
+}
+
+/// The fake's extended items: kept in memory by the entry, listed in
+/// name order, as attributes. Listing and reading count as a stat call,
+/// writing and removing as a `set_attributes` call, for the faults.
+impl diroxide_vfs::ExtendedAttributes for FakeProvider {
+    fn list_extended(
+        &self,
+        place: &Place,
+        ctx: &OpContext,
+    ) -> Result<Vec<diroxide_vfs::ExtendedItem>, VfsError> {
+        self.enter(FakeCall::Stat, place, ctx)?;
+        if !self.exists(place) {
+            return Err(VfsError::NotFound);
+        }
+        let key = self.node_key(place);
+        Ok(self
+            .state()
+            .extended
+            .get(&key)
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|(name, bytes)| {
+                        diroxide_vfs::ExtendedItem::new(
+                            name.clone(),
+                            bytes.len() as u64,
+                            diroxide_vfs::ExtendedKind::Attribute,
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    fn read_extended(
+        &self,
+        place: &Place,
+        name: &str,
+        max_bytes: usize,
+        ctx: &OpContext,
+    ) -> Result<Vec<u8>, VfsError> {
+        self.enter(FakeCall::Stat, place, ctx)?;
+        let bytes = self.extended_now(place, name).ok_or(VfsError::NotFound)?;
+        if bytes.len() > max_bytes {
+            return Err(VfsError::LimitReached {
+                what: "an extended item's bytes".to_owned(),
+                limit: format!("{max_bytes} bytes"),
+            });
+        }
+        Ok(bytes)
+    }
+
+    fn write_extended(
+        &self,
+        place: &Place,
+        name: &str,
+        value: &[u8],
+        ctx: &OpContext,
+    ) -> Result<(), VfsError> {
+        self.enter(FakeCall::SetAttributes, place, ctx)?;
+        if !self.exists(place) {
+            return Err(VfsError::NotFound);
+        }
+        self.set_extended_now(place, name, value);
+        Ok(())
+    }
+
+    fn remove_extended(&self, place: &Place, name: &str, ctx: &OpContext) -> Result<(), VfsError> {
+        self.enter(FakeCall::SetAttributes, place, ctx)?;
+        let key = self.node_key(place);
+        self.state()
+            .extended
+            .get_mut(&key)
+            .and_then(|items| items.remove(name))
+            .map(|_| ())
+            .ok_or(VfsError::NotFound)
     }
 }
 

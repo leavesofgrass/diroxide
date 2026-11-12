@@ -58,6 +58,9 @@ use crate::undo::{LeftAs, UndoRecord};
 mod access;
 #[cfg(test)]
 mod access_tests;
+mod extended;
+#[cfg(test)]
+mod extended_tests;
 mod join;
 #[cfg(test)]
 mod join_tests;
@@ -769,7 +772,7 @@ impl<'a> Run<'a> {
     }
 
     /// The lengths of the undo record, before a step.
-    fn mark(&self) -> (usize, usize, usize, usize, usize) {
+    fn mark(&self) -> (usize, usize, usize, usize, usize, usize) {
         let undo = &self.report.undo;
         (
             undo.moves.len(),
@@ -777,6 +780,7 @@ impl<'a> Run<'a> {
             undo.created.len(),
             undo.attributes.len(),
             undo.relinked.len(),
+            undo.extended.len(),
         )
     }
 
@@ -785,7 +789,7 @@ impl<'a> Run<'a> {
         index: usize,
         subject: &Place,
         outcome: &Outcome,
-        before: (usize, usize, usize, usize, usize),
+        before: (usize, usize, usize, usize, usize, usize),
     ) {
         let word = match outcome {
             Outcome::Done => {
@@ -812,6 +816,7 @@ impl<'a> Run<'a> {
                 created: tail(&undo.created, before.2),
                 attributes: undo.attributes.get(before.3..).unwrap_or_default().to_vec(),
                 relinked: undo.relinked.get(before.4..).unwrap_or_default().to_vec(),
+                extended: undo.extended.get(before.5..).unwrap_or_default().to_vec(),
                 ..UndoRecord::default()
             };
             let _ = journal.step(index as u64, word, &delta);
@@ -958,6 +963,9 @@ impl<'a> Run<'a> {
             Step::JoinPart { from, to } => self.join_part(from, to),
             Step::Relink { place, request } => self.relink(place, request),
             Step::SetAttributes { place, change } => self.set_attributes(place, change),
+            Step::SetExtended { place, name, value } => {
+                self.set_extended(place, name, value.as_deref())
+            }
             Step::RestoreItem { item } => self.restore_item(item),
             Step::Purge { item } => self.purge_item(item),
         }

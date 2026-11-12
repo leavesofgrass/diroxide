@@ -103,4 +103,4 @@ pub use split::{SplitFacts, SplitFile};
 pub use sync::{
     CompareCriteria, Comparison, SyncEnv, SyncMode, SyncPlan, compare_dirs, plan_sync, run_sync,
 };
-pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};
+pub use undo::{ExtendedBefore, LeftAs, Relinked, UndoLog, UndoRecord};

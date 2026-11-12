@@ -263,3 +263,114 @@ fn jobs_without_an_event_wake_no_hook() {
     ));
     assert!(runner.calls.lock().unwrap().is_empty());
 }
+
+/// The pictures of Move into month folders, one folder there already.
+fn months() -> (
+    FakeProvider,
+    Vec<(diroxide_core::Place, diroxide_core::Place)>,
+) {
+    let fake = FakeProvider::new();
+    for name in ["a.jpg", "b.jpg", "c.jpg"] {
+        fake.add_file(&p(&format!("/pics/{name}")), b"jpeg");
+    }
+    fake.add_folder(&p("/pics/2026-09"));
+    let moves = vec![
+        (p("/pics/a.jpg"), p("/pics/2026-10")),
+        (p("/pics/b.jpg"), p("/pics/2026-09")),
+        (p("/pics/c.jpg"), p("/pics/2026-10")),
+    ];
+    (fake, moves)
+}
+
+fn month_request() -> JobRequest {
+    JobRequest::new(JobId::new(9), JobKind::Move, Vec::new()).to(p("/pics"))
+}
+
+#[test]
+fn a_move_into_several_folders_is_one_plan_the_hooks_hear_once() {
+    let (fake, moves) = months();
+    let runner = FakeRunner::with(vec![(
+        hook(0, "Folder guard", 2000, OnSilence::Continue),
+        Behavior::Go,
+    )]);
+    let engine = hooked(&fake, &runner);
+    let plan = engine
+        .plan_moves(
+            &month_request(),
+            &moves,
+            &JobControl::new(),
+            &Script::default(),
+        )
+        .unwrap();
+    let steps: Vec<String> = plan.steps.iter().map(|s| s.describe()).collect();
+    assert_eq!(
+        steps,
+        [
+            format!("make the folder {}", p("/pics/2026-10")),
+            format!("move {} to {}", p("/pics/a.jpg"), p("/pics/2026-10/a.jpg")),
+            format!("move {} to {}", p("/pics/c.jpg"), p("/pics/2026-10/c.jpg")),
+            format!("move {} to {}", p("/pics/b.jpg"), p("/pics/2026-09/b.jpg")),
+        ]
+    );
+    assert_eq!(plan.facts.items, 3);
+    assert_eq!(plan.facts.files, 3);
+    assert_eq!(plan.facts.destination, Some(p("/pics")));
+    {
+        let calls = runner.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1, "the hooks hear the whole plan once");
+        assert_eq!(calls[0].event, HookEvent::Move);
+    }
+    let report = engine.run(&plan, &JobControl::new(), &Script::default());
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    assert!(fake.exists(&p("/pics/2026-10/a.jpg")));
+    assert!(fake.exists(&p("/pics/2026-09/b.jpg")));
+    // One undo puts every picture back and removes the folder it made.
+    let undo = engine.plan_undo(&report.undo, JobId::new(10)).unwrap();
+    let undone = engine.run(&undo, &JobControl::new(), &Script::default());
+    assert!(undone.failed.is_empty(), "{:?}", undone.failed);
+    assert!(fake.exists(&p("/pics/a.jpg")));
+    assert!(fake.exists(&p("/pics/b.jpg")));
+    assert!(!fake.exists(&p("/pics/2026-10")));
+}
+
+#[test]
+fn a_veto_stops_a_move_into_several_folders_before_its_question() {
+    let (fake, moves) = months();
+    let line = "Move stopped: pictures stay (Folder guard)";
+    let runner = FakeRunner::with(vec![(
+        hook(0, "Folder guard", 2000, OnSilence::Continue),
+        Behavior::Veto(line),
+    )]);
+    let engine = hooked(&fake, &runner);
+    let refused = engine.plan_moves(
+        &month_request(),
+        &moves,
+        &JobControl::new(),
+        &Script::default(),
+    );
+    assert_eq!(refused, Err(OpsError::HookStopped(line.to_owned())));
+    assert!(!fake.exists(&p("/pics/2026-10")), "nothing made");
+}
+
+#[test]
+fn a_file_with_a_folders_name_refuses_the_whole_move() {
+    let (fake, moves) = months();
+    fake.add_file(&p("/pics/2026-10"), b"not a folder");
+    let refused = engine(&fake).plan_moves(
+        &month_request(),
+        &moves,
+        &JobControl::new(),
+        &Script::default(),
+    );
+    assert!(refused.is_err());
+    assert!(
+        engine(&fake)
+            .plan_moves(
+                &month_request(),
+                &[],
+                &JobControl::new(),
+                &Script::default()
+            )
+            .is_err()
+    );
+}

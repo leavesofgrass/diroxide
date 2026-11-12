@@ -449,7 +449,9 @@ fn decryption_asks_once_for_a_key_even_when_the_agent_forgets() {
     assert_eq!(report.job.done.len(), 2, "{:?}", report.lines());
     let asked = answers.asked.lock().unwrap();
     assert_eq!(asked.len(), 1);
-    assert_eq!(asked[0].kind, SecretKind::ServerPrompt);
+    // Through the file-passphrase prompt, the key its subject.
+    assert_eq!(asked[0].kind, SecretKind::FilePassphrase);
+    assert_eq!(asked[0].subject, "key ending 87A4");
     assert_eq!(
         asked[0].prompt_line(),
         "Passphrase for key ending 87A4 (hidden): "
