@@ -2,6 +2,30 @@
 
 This page says in plain words what each alpha added. [The changelog](../CHANGELOG.md) has the full list, by area, and [known limits](known-limits.md) says what is still missing.
 
+## Alpha 5 (not released yet)
+
+This section was opened on Thursday, November 12, 2026, while alpha 5 is being built, and it lists what can be reached so far. Later guides for batch rename, comparing and synchronizing folders, duplicates, the flat view and collections, and the new command line commands arrive with their features. Nothing here has been heard on a screen reader or read on a Braille display.
+
+### Tabs
+
+- Each panel can hold several folders as tabs. Ctrl+T opens a new tab, a copy of the one you are in: "New tab: diroxide-app, tab 2 of 2". Ctrl+W closes it. In the window Ctrl+Tab, Ctrl+Shift+Tab and Alt with a digit move between tabs. In a terminal the View menu's Tabs submenu (Alt+V, then N) holds every tab command.
+- A tab is said with its folder first: "Documents, tab 2 of 3". A lock is said after the number only when one holds: "Documents, tab 2 of 3, locked". A panel with one tab says nothing about tabs, and no tab bar is drawn.
+- Each tab keeps its own folder, sort, filter, columns, marks, cursor and history. Only the tab you are in is watched.
+- Lock tab keeps a tab where it is: closing it asks first, starting on No, and a change of folder opens a new tab instead. Pin tab lets a tab move freely and remembers its base folder for Go to base folder.
+- Undo close tab brings back the last 16 tabs you closed, newest first, for this session. The tab list reads every tab of a panel, and Move tab and Copy tab send a tab to the other panel.
+- Save tab set keeps both panels' tabs under a name, in `tab-sets.toml`, and Load tab set brings them back in place of the open tabs. The next start restores every tab. The session file is version 2 now: alpha 4 can still open it, and forgets the tabs when it writes. [Tabs](tabs.md) is the new guide.
+
+### Settings, files and privacy
+
+- Remember recent files (`recent_files`, on) keeps up to 50 files you opened or edited from diroxide in `recent.toml` in the state folder, on this computer only. Off: nothing is kept, and the list is emptied. [Privacy](privacy.md) says that `session.toml`, `tab-sets.toml`, the saved searches and `recent.toml` hold paths.
+
+### Smaller changes
+
+- Refusing to write a RAR archive now says "RAR is read only in diroxide", shorter, so it fits a 40-cell Braille line whole.
+- A gpg key's passphrase is asked through the same hidden prompt as a locked file's, and still reads "Passphrase for key ending 4E7B (hidden):" in 40 cells.
+- Listing a folder and reading one entry's facts do less work, most of all on Windows, where each entry is opened once and not twice. Measured back to back on a busy machine, listing took 80, 18 and 49 percent of its old time in three runs, and a stat 52, 32 and 66 percent. A quiet machine has not measured it yet; [the bench](dev/bench.md) has the record.
+- The nightly fuzz run's finds are fixed: a virtual disk that claims huge parts, a picture whose header made the reader go over the same bytes again, a tar that began with the name of another format, and a name in a checksum list that came out as a place on another drive after its `.` part was dropped. [Fuzzing](dev/fuzzing.md) tells each.
+
 ## Alpha 4
 
 What alpha 4 added, released on Sunday, November 8, 2026. The sections follow the order you meet things in: the helper programs, what a file is, what is in it, what you can do with it, and then the window, the plugins and the command line.

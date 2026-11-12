@@ -21,7 +21,7 @@ In `fuzz/`:
 - `archive_roundtrip`: diroxide's archive writers against its readers.
 - `archive_slt`: the 7z tool backend's listing parser. The input is a `7z l -slt` listing, as 7-Zip prints it or as a hostile member name might twist it, parsed and indexed under the strict limits. Nothing may panic, every record must point at an item that exists, and no indexed path may climb out. The body is `diroxide_archive::fuzzing::slt`. It has no seeds folder: its samples are `SLT_SAMPLES` in `crates/diroxide-archive/src/fuzzing.rs`, replayed by the crate's tests. Its own comment asks for `-max_len=262144`.
 - `highlight_hang`: the highlighter, which must never hang; the first byte picks the language.
-- `preview_image_header`: the picture words' header readers, with small limits; a header that reads must give words.
+- `preview_image_header`: the picture words' header readers, with small limits; a header that reads must give words, and the bytes taken from the file must stay within the limit. The limit counts bytes taken, not the position reached: [What the nightly run found](#what-the-nightly-run-found) says why.
 - `preview_container`: the previews' read path for zip-based documents, through its member checks and its nesting cut, with small caps.
 - `component_manifest`: the optional components list, `components.toml`.
 - `plugin_framing`: the plugin protocol's line reader and message parser.
@@ -133,6 +133,17 @@ Then fix the bug, and keep the input as a regular test in the crate it came from
 - The last job writes the run's summary: one line per target, failures first, the meaning first, such as "Pass: archive_zip, 10 minutes, 41,200 runs" or "Fail: archive_7z, crash, input uploaded, after 1,234 runs".
 
 To replay a nightly crash, download its artifact from the run's page, or with `gh run download RUN-ID --name fuzz-crash-TARGET`, save the input in the target's `artifacts` folder, and run the command in its `README.txt`.
+
+## What the nightly run found
+
+The first nights failed five targets, from four causes. Each was fixed, and each input from the logs is kept as a replay test in the crate it came from, with neighbors, so the fix stays. The runs' logs were enough: no artifact was downloaded.
+
+- A virtual disk's descriptor claimed extents so long that adding them overflowed a 64-bit number (`container_header` and `image`, in the disk image plugin). The ZERO and FLAT extents' lengths are the descriptor's own claim, saturated at the top of a 64-bit number, so two huge extents summed past it when the parts were joined. The offset is now measured into each part, never summed.
+- A picture's header read was bounded by position and not by bytes (`preview_image_header`). The property failed: more than the 1 MiB limit was read from a file smaller than that. Every seek refilled the 16 KiB buffer, so a walk over many small boxes read the same bytes again and again. The source under the buffer now counts every byte it gives and refuses past the limit and four buffers, as a header that is too long. A seek inside the buffer keeps it, the whole-file reads for Exif are skipped once the budget is spent, and the box walk's end check saturates, since a box could claim the end of a 64-bit number. The replay tests are a seek storm, many small boxes and a huge box inside a `meta` box.
+- A checksum list's name was checked for a drive too early (`meta_checksum_list`). A name such as `.\q:...` passed the check for a drive, and once its `.` part was dropped it came out as `q:...`, a place on another drive, which then read back as refused. This was a security gap, since a name from a list must never leave its folder. The drive is now checked again on the joined name, and the fuzz body asserts that no name taken starts with a drive.
+- A tar whose first member was named like another format's start was taken for that format (`archive_roundtrip`). A plain tar written with a first member named `hsqs/` or `KDMVw/` began with those bytes, so the sniffer took it for a squashfs or a VMDK, and the reader refused what the writer had made. The sniffer now looks first for a tar header whose checksum holds, and only then for the start magics.
+
+One possible overflow was judged unreachable and left alone: the sums of the ISO reader's extents, which are 32-bit numbers.
 
 ## By day
 

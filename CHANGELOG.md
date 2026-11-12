@@ -2,6 +2,43 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
+## Unreleased: alpha 5
+
+Alpha 5 is the planned alpha.8, in the making. This section was opened on Thursday, November 12, 2026 with tabs, the recent files setting, the follow-ups to alpha 4 and the speed and fuzzing work that are merged, and the lanes still to merge add their entries. Nothing is released until the owner says so.
+
+### Tabs
+
+- A panel holds a list of tabs, one shown. Each tab is a whole folder view with its own place, sort, filter, columns, selection, cursor and history. Only the shown tab is watched and takes replies; a parked tab lists its folder again when it is shown, and a job that ends after a switch only speaks.
+- 26 commands: New tab, New tab for the focused folder, Close tab, Close other tabs, Undo close tab, Next tab, Previous tab, Go to tab 1 to 9, Move tab left and right, Move and Copy tab to the other panel, Lock tab, Pin tab, Go to base folder, Tab list, Save tab set and Load tab set. The catalog goes from 277 to 303 commands.
+- Keys: Ctrl+T and Ctrl+W, kept in the terminal too, and in the window Ctrl+Tab, Ctrl+Shift+Tab and Alt+1 to Alt+9. The View menu has the Tab list and a Tabs submenu (Alt+V, then N).
+- A tab is said folder first, "Documents, tab 2 of 3", with its lock after the number only when one holds. Nothing about tabs is said with one tab. No tab bar is drawn.
+- A locked tab asks before it closes (the question starts on No) and opens a change of folder in a new tab. A pinned tab changes folder freely and remembers its base folder.
+- Undo close tab keeps the last 16 closed tabs, for the session. Saved tab sets are in `tab-sets.toml` in the state folder, by name, up to 24 characters.
+- The session file is version 2: each panel's tabs beside the two panels. A version 1 file opens as one tab a panel. Alpha 4 opens a version 2 file with the current folders and drops the tabs when it writes.
+- The window has four new dialogs: the tab list, the question before a locked tab closes, Save tab set's name and the saved sets (116 purposes, from 112).
+- New guide: [Tabs](docs/tabs.md).
+
+### Settings, state files and privacy
+
+- Setting `recent_files` (Remember recent files, on, in the Safety group): the files opened or edited from diroxide, newest first, at most 50, in `recent.toml` in the state folder, written atomically. Off: nothing is kept and a list left from before is emptied. A file that cannot be read is kept as `recent.toml.bad`. The setting reference is regenerated.
+- The settings, privacy and panels guides name the new state files, which hold paths: `tab-sets.toml`, `recent.toml`, and the tabs in `session.toml`.
+
+### Archives, encryption and the library follow-ups of alpha 4
+
+- The refusal to write a RAR is "RAR is read only in diroxide", 28 cells where it was 42.
+- A gpg key's passphrase is a file-passphrase question whose subject is the key, so "Passphrase for key ending 87A4 (hidden):" stays whole in 40 cells.
+- The Encryption plugin declares `fs = "write"` and writes through the host's stage and commit (`fs/stage` and `fs/commit`).
+- The date a picture was taken is read to the second (`image.taken_second`), and a field can give a sort value. An undo record can hold extended facts and still reads an alpha 4 record. Moves into several folders go through one planner with the hooks run. Hot folders read a tool's version through the tool runner.
+
+### Speed
+
+- A stat on Windows opens each entry once instead of twice, and a listing builds an entry's full path only for a link. Name checks allocate nothing for an ASCII name. Back to back with the old code under load, listing took 80, 18 and 49 percent of the old time in three runs, and a stat 52, 32 and 66 percent. Quiet numbers wait for the next baseline.
+
+### For contributors
+
+- Four fixes from the nightly fuzz run, each with its logged inputs as replay tests: a VMDK descriptor's extents no longer sum past a 64-bit number; a picture's header read is bounded by the bytes taken and not only the position; a checksum list's name is checked for a drive again after its dot parts go (a name such as `.\q:...` could come out as a place on another drive); a tar whose first member is named like another format's start is still a tar.
+- [Fuzzing](docs/dev/fuzzing.md) tells the four causes.
+
 ## 0.1.0-alpha.4
 
 Alpha 4 teaches diroxide what a file is, what is in it and what can be done with it: a tools registry with `diro doctor` and helper programs as optional components, a file type model with groups, a details view with who can do what, richer previews, custom columns, notes and fields, checksums with signature checks, privacy checks, conversions, watched folders, archive formats read through 7-Zip and edited inside a zip, disk images and git as plugins, encryption and signatures, Change time and Change owner, the photo helpers, the window's picture view, and new commands in `diro`. It is the planned alpha.7, released on Sunday, November 8, 2026.
