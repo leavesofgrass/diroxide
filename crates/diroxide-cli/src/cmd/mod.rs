@@ -21,6 +21,7 @@ pub mod join;
 pub mod keys;
 pub mod ls;
 pub mod plugin;
+pub mod rename;
 pub mod run;
 pub mod search;
 pub mod split;
