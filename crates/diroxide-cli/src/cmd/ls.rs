@@ -30,6 +30,7 @@ use diroxide_core::sort::{SortSpec, sort_entries};
 use diroxide_core::{
     Attributes, Clock, Entry, EntryKind, Explain, Message, Place, Timestamp, UtcOffset,
 };
+use diroxide_search::{PathLimits, PathListError, PathSeparator, read_path_list};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use serde_json::{Value, json};
 
@@ -342,53 +343,48 @@ fn list_stdin(
     out: &mut dyn Write,
     lister: &Lister<'_>,
 ) -> Result<i32, CliError> {
-    let mut bytes = Vec::new();
-    input
-        .take(MAX_LIST_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| CliError::Failed(format!("standard input could not be read: {e}")))?;
-    if bytes.len() as u64 > MAX_LIST_BYTES {
-        say(
-            out,
-            args,
-            "List is too long: over 64 MB. Nothing was listed.",
-        )?;
-        return Ok(1);
-    }
-    let has_nul = bytes.contains(&0);
-    let has_line_break = bytes.contains(&b'\n');
-    let items: Vec<&[u8]> = match args.separator {
-        Separator::Nul => {
-            if !has_nul && has_line_break {
-                say(out, args, "No NUL separators found. Use --lines.")?;
-                return Ok(2);
-            }
-            bytes.split(|b| *b == 0).filter(|i| !i.is_empty()).collect()
+    // FC's one reader for `diro -` and `diro ls -` (alpha 5): the same
+    // separators, the 64 MiB limit and the 16,384-path limit.
+    let separator = match args.separator {
+        Separator::Nul => PathSeparator::Nul,
+        Separator::Lines => PathSeparator::Lines,
+    };
+    let limits = PathLimits {
+        max_bytes: MAX_LIST_BYTES,
+        ..PathLimits::default()
+    };
+    let list = match read_path_list(input, separator, limits) {
+        Ok(list) => list,
+        Err(PathListError::TooLong(_)) => {
+            say(
+                out,
+                args,
+                "List is too long: over 64 MB. Nothing was listed.",
+            )?;
+            return Ok(1);
         }
-        Separator::Lines => {
-            if has_nul {
-                say(out, args, "The list has NUL separators. Leave out --lines.")?;
-                return Ok(2);
-            }
-            bytes
-                .split(|b| *b == b'\n')
-                .map(|line| line.strip_suffix(b"\r").unwrap_or(line))
-                .filter(|line| !line.is_empty())
-                .collect()
+        Err(PathListError::Read(e)) => {
+            return Err(CliError::Failed(format!(
+                "standard input could not be read: {e}"
+            )));
+        }
+        Err(refused) => {
+            say(out, args, &refused.to_string())?;
+            return Ok(2);
         }
     };
-    if items.is_empty() {
+    if list.is_empty() {
         say(out, args, "List is empty. Nothing to list.")?;
         return Ok(0);
     }
     let mut listed = 0u64;
     let mut failed = 0u64;
-    for (index, item) in items.iter().enumerate() {
-        let text = match std::str::from_utf8(item) {
-            Ok(text) => text,
-            Err(_) => {
+    for item in &list.items {
+        let text = match &item.text {
+            Some(text) => text.as_str(),
+            None => {
                 failed += 1;
-                let what = format!("item {}", index + 1);
+                let what = item.what();
                 problem(
                     out,
                     args,
@@ -408,6 +404,16 @@ fn list_stdin(
                 problem(out, args, text, &message)?;
             }
         }
+    }
+    if list.stopped_at_limit {
+        say(
+            out,
+            args,
+            &format!(
+                "Stopped at the limit of {} paths.",
+                diroxide_core::format::grouped(list.max_paths as u64)
+            ),
+        )?;
     }
     if !args.json {
         let summary = match (listed, failed) {
