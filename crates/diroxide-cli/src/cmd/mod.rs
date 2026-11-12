@@ -26,6 +26,7 @@ pub mod rename;
 pub mod run;
 pub mod search;
 pub mod split;
+pub mod stdin_list;
 pub mod sum;
 pub mod sync;
 pub mod watch;
