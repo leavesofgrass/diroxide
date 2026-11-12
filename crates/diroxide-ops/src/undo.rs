@@ -73,6 +73,32 @@ impl Relinked {
     }
 }
 
+/// One extended attribute or stream a job changed (the internet mark
+/// removed, a tag written), with what it held before: undo writes the
+/// old bytes back, or removes the item when it was not there.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtendedBefore {
+    /// The file that carries it.
+    pub place: Place,
+    /// Its name as the system gives it: `Zone.Identifier`,
+    /// `com.apple.quarantine`.
+    pub name: String,
+    /// Its bytes before the job, `None` when it was not there.
+    #[serde(default)]
+    pub before: Option<Vec<u8>>,
+}
+
+impl ExtendedBefore {
+    /// The step that puts it back.
+    pub fn back(&self) -> Step {
+        Step::SetExtended {
+            place: self.place.clone(),
+            name: self.name.clone(),
+            value: self.before.clone(),
+        }
+    }
+}
+
 /// What one job did that can be undone.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -108,6 +134,12 @@ pub struct UndoRecord {
     /// target, in the order done. Undo points them back, newest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relinked: Vec<Relinked>,
+    /// Extended attributes and streams changed, each with its bytes
+    /// before, in the order done (lane MA's request 5: the internet
+    /// mark's removal is undone through the engine). Undo writes them
+    /// back first, newest first, before any entry moves.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extended: Vec<ExtendedBefore>,
 }
 
 impl UndoRecord {
@@ -127,9 +159,11 @@ impl UndoRecord {
             && self.created.is_empty()
             && self.attributes.is_empty()
             && self.relinked.is_empty()
+            && self.extended.is_empty()
     }
 
-    /// The plan that undoes this record: attribute changes put back and
+    /// The plan that undoes this record: extended items written back,
+    /// newest first; attribute changes put back and
     /// links changed in one step pointed back, newest first; then the
     /// files it made go, newest first, to the trash; then its moves
     /// backwards, in reverse order; then the folders it made, removed if
@@ -144,15 +178,16 @@ impl UndoRecord {
     /// one first would bring it straight back.
     pub fn undo_plan(&self, job: JobId, folders: &[Place]) -> Plan {
         let mut set_aside: Vec<Place> = Vec::new();
-        let mut steps: Vec<Step> = self
-            .attributes
-            .iter()
-            .rev()
-            .map(|(place, change)| Step::SetAttributes {
-                place: place.clone(),
-                change: change.clone(),
-            })
-            .collect();
+        let mut steps: Vec<Step> = self.extended.iter().rev().map(ExtendedBefore::back).collect();
+        steps.extend(
+            self.attributes
+                .iter()
+                .rev()
+                .map(|(place, change)| Step::SetAttributes {
+                    place: place.clone(),
+                    change: change.clone(),
+                }),
+        );
         steps.extend(self.relinked.iter().rev().map(|relinked| Step::Relink {
             place: relinked.place.clone(),
             request: relinked.back(),

@@ -95,4 +95,4 @@ pub use queue::{Cancelled, Grant, HostKey, JobClass, Queue, QueueLimits};
 pub use resume::{JobNotice, Ledger, NotResumed, Partial};
 pub use sidecar::{Sidecar, SidecarRead};
 pub use split::{SplitFacts, SplitFile};
-pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};
+pub use undo::{ExtendedBefore, LeftAs, Relinked, UndoLog, UndoRecord};
