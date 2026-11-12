@@ -17,6 +17,7 @@ thread_local! {
 
 /// An entry was opened, a handle made and closed.
 #[inline]
+#[cfg_attr(not(windows), allow(dead_code, reason = "Unix's stat opens nothing"))]
 pub(crate) fn opened() {
     #[cfg(test)]
     OPENS.with(|count| count.set(count.get() + 1));
