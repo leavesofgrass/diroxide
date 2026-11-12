@@ -324,11 +324,11 @@ impl Signature {
 }
 
 /// The refusal to write a format read only through 7-Zip: "RAR is read
-/// only: diroxide never writes it". The owner's answer 116: diroxide
-/// reads RAR and never writes it.
+/// only in diroxide", 28 cells. The owner's answer 116: diroxide reads
+/// RAR and never writes it.
 pub fn never_written(signature: Signature) -> String {
     format!(
-        "{} is read only: diroxide never writes it",
+        "{} is read only in diroxide",
         signature.short()
     )
 }
@@ -793,8 +793,12 @@ mod tests {
         );
         assert_eq!(
             never_written(Signature::Rar),
-            "RAR is read only: diroxide never writes it"
+            "RAR is read only in diroxide"
         );
+        // Within 40 cells for every format's short name (lane AW's
+        // request 2; it was 42).
+        assert_eq!(never_written(Signature::Rar).chars().count(), 28);
+        assert!(never_written(Signature::ZipSpanned).chars().count() <= 40);
         assert_eq!(Signature::Rar.feature(), "rar");
         assert_eq!(Signature::Iso.feature(), "iso");
         assert_eq!(Signature::Cab.feature(), "archives");
