@@ -3,16 +3,23 @@
 
 use super::*;
 
-/// A new folder for one test, under the build's temporary folder.
-fn temp() -> tempfile::TempDir {
+/// A new folder for one test, under the build's target folder, so the
+/// set is never made anywhere else.
+pub(super) fn temp() -> tempfile::TempDir {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let work = target_folder(&root).join("demo-tools-tests");
+    fs::create_dir_all(&work).unwrap();
     tempfile::Builder::new()
         .prefix("demo-tools-")
-        .tempdir()
+        .tempdir_in(&work)
         .unwrap()
 }
 
 /// The set made without git, in a new folder.
-fn make_set() -> (tempfile::TempDir, PathBuf, Made) {
+pub(super) fn make_set() -> (tempfile::TempDir, PathBuf, Made) {
     let dir = temp();
     let folder = dir.path().join("check");
     let staging = dir.path().join("staging");
@@ -31,23 +38,37 @@ fn every_fixture_is_made_with_plain_names_and_the_same_bytes_twice() {
         assert!(line.starts_with(&format!("{name}, ")), "{line}");
     }
     assert!(made.lines[FIXTURES.len()].starts_with(STEPS_FILE));
-    assert!(
-        made.lines
-            .last()
-            .unwrap()
-            .starts_with("Start the check: diro --portable ")
+    assert_eq!(
+        made.lines[FIXTURES.len() + 1],
+        format!("Step 2's shell line: {}", rename_line(&first))
     );
+    assert_eq!(
+        made.lines[FIXTURES.len() + 2],
+        format!("Step 8's cmd.exe line: {}", pipe_line(&first))
+    );
+    assert_eq!(
+        made.lines.last().unwrap(),
+        &format!("Start the check: {}", start_line(&first))
+    );
+    assert_eq!(made.lines.len(), FIXTURES.len() + 4);
     let (_two, second, _) = make_set();
     let files = every_file(&first);
     assert_eq!(files, every_file(&second));
-    assert_eq!(files.len(), 28, "{files:?}");
+    // Alpha 4's 28, and alpha 5's 101 (100 where no hard link is made).
+    let linked = first.join("dups/linked/two.txt").is_file();
+    assert_eq!(files.len(), if linked { 129 } else { 128 }, "{files:?}");
     for file in &files {
         for part in file.components() {
             let name = part.as_os_str().to_str().unwrap();
             assert!(crate::demo::plain(name), "{}", file.display());
         }
-        // The task file names its own home; everything else is the same.
-        if file.ends_with("scans.toml") || file.ends_with(STEPS_FILE) {
+        // The task file, the steps, the saved files and the pipe's list
+        // name their own folder; everything else is the same.
+        if file.ends_with("scans.toml")
+            || file.ends_with(STEPS_FILE)
+            || file.starts_with("state")
+            || file.ends_with("paths.nul")
+        {
             continue;
         }
         assert!(
@@ -421,12 +442,41 @@ fn the_task_file_reads_as_a_task() {
 
 #[test]
 fn the_steps_name_every_step_and_the_start() {
-    let text = steps_text(Path::new(r"D:\dirocheck4"));
-    for step in 0..=12 {
-        assert!(text.contains(&format!("Step {step}, ")), "step {step}");
+    let folder = Path::new(r"D:\dirocheck5");
+    let text = steps_text(folder);
+    for step in 0..=9 {
+        assert!(text.contains(&format!("\nStep {step}, ")), "step {step}");
     }
-    assert!(text.contains(r"Start: diro --portable D:\dirocheck4\photos D:\dirocheck4\out"));
-    assert!(!text.contains("{PATH}"));
+    assert!(!text.contains("Step 10, "));
+    assert!(text.contains(&format!("\nStart: {}\n", start_line(folder))));
+    assert!(text.contains(&format!("From a shell: {}\n", rename_line(folder))));
+    assert!(text.contains(&format!("In cmd.exe: {}\n", pipe_line(folder))));
+    for mark in ["{PATH}", "{START}", "{RENAME}", "{PIPE}"] {
+        assert!(!text.contains(mark), "{mark}");
+    }
+}
+
+/// Every step ends with the lanes whose words it waits on, and every
+/// line to hear fits a 40-cell line.
+#[test]
+fn every_step_names_its_lanes_and_every_quoted_line_fits_40_cells() {
+    let text = steps_text(Path::new(r"D:\dirocheck5"));
+    let steps: Vec<&str> = text.split("\n\n").skip(1).collect();
+    assert_eq!(steps.len(), 10);
+    for step in steps {
+        let last = step.trim_end().lines().last().unwrap();
+        assert!(last.starts_with("To be checked: "), "{step}");
+    }
+    let mut quoted = 0;
+    for line in text.lines() {
+        for (at, part) in line.split('"').enumerate() {
+            if at % 2 == 1 {
+                quoted += 1;
+                assert!(part.chars().count() <= 40, "{part}");
+            }
+        }
+    }
+    assert!(quoted >= 50, "{quoted}");
 }
 
 /// git makes both repositories when it is there; only the placeholder
