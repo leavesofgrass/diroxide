@@ -58,6 +58,7 @@ mod run;
 mod run_tests;
 pub mod sidecar;
 pub mod split;
+pub mod sync;
 #[cfg(test)]
 mod testing;
 // The arrival tracker (W3t, plan commit 33).
@@ -95,4 +96,7 @@ pub use queue::{Cancelled, Grant, HostKey, JobClass, Queue, QueueLimits};
 pub use resume::{JobNotice, Ledger, NotResumed, Partial};
 pub use sidecar::{Sidecar, SidecarRead};
 pub use split::{SplitFacts, SplitFile};
+pub use sync::{
+    CompareCriteria, Comparison, SyncEnv, SyncMode, SyncPlan, compare_dirs, plan_sync, run_sync,
+};
 pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};
