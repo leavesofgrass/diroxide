@@ -571,3 +571,113 @@ fn a_png_of_noise_after_its_signature_fails_in_plain_words() {
         "the header is damaged"
     );
 }
+
+/// A source that counts the bytes it gives.
+struct Counting {
+    inner: Cursor<Vec<u8>>,
+    read: u64,
+}
+
+impl std::io::Read for Counting {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.read += n as u64;
+        Ok(n)
+    }
+}
+
+impl std::io::Seek for Counting {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        self.inner.seek(pos)
+    }
+}
+
+/// The nightly fuzz run's `preview_image_header` crash (first found
+/// Tuesday, November 10, 2026; its input was too long for the log): the
+/// limit held the position, not the bytes read, so seeking back and
+/// forth read the same bytes again, each seek refilling the buffer.
+#[test]
+fn seeking_back_and_forth_spends_the_read_budget() {
+    let limits = HeaderLimits {
+        max_bytes: 150_000,
+        max_parts: 100,
+    };
+    let mut source = Counting {
+        inner: Cursor::new(vec![0u8; 200_000]),
+        read: 0,
+    };
+    let mut refused = false;
+    {
+        let mut src = header::Src::new(&mut source, limits);
+        for _ in 0..1_000 {
+            let back = src.seek_to(0).and_then(|()| src.head(1));
+            let forth = src.seek_to(100_000).and_then(|()| src.head(1));
+            match (back, forth) {
+                (Ok(_), Ok(_)) => {}
+                (Err(ImageError::HeaderTooLong), _) | (_, Err(ImageError::HeaderTooLong)) => {
+                    refused = true;
+                    break;
+                }
+                other => panic!("only the budget may stop it: {other:?}"),
+            }
+        }
+    }
+    assert!(refused, "the budget must run out");
+    assert!(
+        source.read <= limits.max_bytes + header::READ_AHEAD,
+        "{}",
+        source.read
+    );
+}
+
+/// A JPEG 2000 file of many small boxes, none the header: a seek inside
+/// the buffer keeps it, so each byte is read once.
+#[test]
+fn walking_small_boxes_reads_each_byte_once() {
+    for (boxes, size) in [(100usize, 8u32), (4_000, 8), (5_000, 8), (60, 20_000)] {
+        let mut bytes = vec![0, 0, 0, 12, b'j', b'P', b' ', b' ', 0x0d, 0x0a, 0x87, 0x0a];
+        for _ in 0..boxes {
+            bytes.extend_from_slice(&size.to_be_bytes());
+            bytes.extend_from_slice(b"free");
+            bytes.resize(bytes.len() + size as usize - 8, 0);
+        }
+        crate::fuzzing::image_header(&bytes);
+        let mut source = Counting {
+            inner: Cursor::new(bytes.clone()),
+            read: 0,
+        };
+        let _ = read_header(&mut source, TypeHint::default(), HeaderLimits::default());
+        assert!(
+            source.read <= bytes.len() as u64 + header::READ_AHEAD,
+            "{boxes} boxes of {size}: {} of {}",
+            source.read,
+            bytes.len()
+        );
+    }
+}
+
+/// A HEIF box inside `meta` whose 64-bit size carries the walk to the
+/// end of a u64: the walk ends, the sum never overflows.
+#[test]
+fn a_box_claiming_the_end_of_a_u64_ends_the_walk() {
+    let mut bytes = vec![0, 0, 0, 16];
+    bytes.extend_from_slice(b"ftypheic");
+    bytes.extend_from_slice(&[0; 4]);
+    bytes.extend_from_slice(&100u32.to_be_bytes());
+    bytes.extend_from_slice(b"meta");
+    bytes.extend_from_slice(&[0; 4]);
+    for size in [u64::MAX, u64::MAX - 8, u64::MAX - 40] {
+        let mut file = bytes.clone();
+        file.extend_from_slice(&1u32.to_be_bytes());
+        file.extend_from_slice(b"iprp");
+        file.extend_from_slice(&size.to_be_bytes());
+        file.resize(116, 0);
+        crate::fuzzing::image_header(&file);
+        let mut file = bytes.clone();
+        file.extend_from_slice(&1u32.to_be_bytes());
+        file.extend_from_slice(b"junk");
+        file.extend_from_slice(&size.to_be_bytes());
+        file.resize(116, 0);
+        crate::fuzzing::image_header(&file);
+    }
+}

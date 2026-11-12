@@ -104,3 +104,24 @@ fn the_nightly_crash_inputs_pass_every_target() {
     fuzzing::all(&[b"conectix".as_slice(), &[0u8; 511]].concat());
     fuzzing::all(&[&[0u8; 500], b"conectix".as_slice()].concat());
 }
+
+/// The nightly fuzz run's VMDK crash (first found Monday, November 9,
+/// 2026; its inputs were too long for the log): a descriptor whose extents
+/// claim more than a u64 holds between them. Reading near the end of the
+/// joined disk summed the parts' lengths past the end of a u64. These
+/// descriptors reach it, with neighbors: one huge part, a part after a
+/// huge one, and many parts each just short of the end.
+#[test]
+fn a_descriptor_of_huge_extents_reads_without_overflow() {
+    let max = u64::MAX;
+    let near = u64::MAX / 512;
+    for text in [
+        format!("# Disk DescriptorFile\nRW 1 ZERO\nRW {max} ZERO\n"),
+        format!("# Disk DescriptorFile\nRW {max} ZERO\nRW 1 ZERO\n"),
+        format!("# Disk DescriptorFile\nRW {near} ZERO\nRW {near} ZERO\nRW {near} ZERO\n"),
+        format!("# Disk DescriptorFile\nRW {max} ZERO\nRW {max} ZERO\n"),
+        "# Disk DescriptorFile\nRW 1 ZERO\nRW 2 ZERO\n".to_owned(),
+    ] {
+        fuzzing::all(text.as_bytes());
+    }
+}

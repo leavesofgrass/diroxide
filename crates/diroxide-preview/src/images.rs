@@ -118,6 +118,11 @@ impl From<std::io::Error> for ImageError {
     fn from(error: std::io::Error) -> Self {
         if error.kind() == std::io::ErrorKind::UnexpectedEof {
             ImageError::CutShort
+        } else if error
+            .get_ref()
+            .is_some_and(|inner| inner.is::<header::OverBudget>())
+        {
+            ImageError::HeaderTooLong
         } else {
             ImageError::Io(error.to_string())
         }

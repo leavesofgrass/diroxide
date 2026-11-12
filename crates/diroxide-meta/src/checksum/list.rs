@@ -311,11 +311,7 @@ fn one_file(raw: &str, list_name: &str, named: Option<Algorithm>) -> Option<List
 /// `.` parts dropped; `None` when it is absolute (a leading separator, a
 /// drive letter, a share) or a part is `..`.
 fn checked_name(name: &str) -> Option<String> {
-    if name.starts_with(['/', '\\']) {
-        return None;
-    }
-    let bytes = name.as_bytes();
-    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+    if name.starts_with(['/', '\\']) || has_drive(name) {
         return None;
     }
     let parts: Vec<&str> = name
@@ -325,7 +321,17 @@ fn checked_name(name: &str) -> Option<String> {
     if parts.is_empty() || parts.contains(&"..") {
         return None;
     }
-    Some(parts.join("/"))
+    // The drive is checked again once the `.` parts are gone: `./C:/x`
+    // would else come out as `C:/x`, a place on another drive (the
+    // nightly fuzz run found it as a name that read back refused).
+    let joined = parts.join("/");
+    (!has_drive(&joined)).then_some(joined)
+}
+
+/// Whether a name starts with a drive letter and its colon, `C:`.
+fn has_drive(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic()
 }
 
 /// GNU's escape for a name holding a backslash, a line feed or a
@@ -488,7 +494,7 @@ mod tests {
     #[test]
     fn a_name_that_leaves_the_folder_is_refused_and_spelled_out() {
         let text = format!(
-            "{A}  ../outside.txt\n{A}  /etc/passwd\n{A}  C:\\Windows\\a.dll\n{A}  a/../../b\n{A}  \\\\server\\share\\x\n{A}  ..\\up.txt\n{A}  odd\u{202E}name/../../x\n"
+            "{A}  ../outside.txt\n{A}  /etc/passwd\n{A}  C:\\Windows\\a.dll\n{A}  a/../../b\n{A}  \\\\server\\share\\x\n{A}  ..\\up.txt\n{A}  odd\u{202E}name/../../x\n{A}  ./C:/Windows/a.dll\n{A}  .\\\\D:x\n"
         );
         let list = parse_list(text.as_bytes(), "SHA256SUMS");
         assert!(list.entries.is_empty(), "{:?}", list.entries);
@@ -497,7 +503,7 @@ mod tests {
             words[0],
             "Skipped a name that leaves the folder: ../outside.txt"
         );
-        assert_eq!(words.len(), 7);
+        assert_eq!(words.len(), 9);
         assert!(words[6].contains("[U+202E]"));
     }
 

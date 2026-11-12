@@ -103,17 +103,72 @@ pub(super) fn sniff(head: &[u8]) -> Option<Sniffed> {
     }
 }
 
+/// The bytes a header read may take from its source past
+/// [`HeaderLimits::max_bytes`]: the buffered reader's refills after a
+/// seek, four buffers of 16 KiB.
+pub(super) const READ_AHEAD: u64 = 64 * 1024;
+
+/// The error a [`Metered`] source gives when its budget is spent; it
+/// becomes [`ImageError::HeaderTooLong`].
+#[derive(Debug)]
+pub(super) struct OverBudget;
+
+impl std::fmt::Display for OverBudget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("its header is too long to read here")
+    }
+}
+
+impl std::error::Error for OverBudget {}
+
+/// The source under the buffer, counting every byte it gives. The limit
+/// on the position alone let a reader that seeks back and forth read the
+/// same bytes again without end, each seek refilling the buffer (the
+/// nightly fuzz run read past 1 MiB from a file under its limit of
+/// 1 MiB, Tuesday, November 10, 2026), so the bytes taken are bounded
+/// too, by the limit and [`READ_AHEAD`].
+pub(super) struct Metered<'a> {
+    inner: &'a mut dyn diroxide_vfs::ReadSeek,
+    left: u64,
+}
+
+impl Read for Metered<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        if self.left == 0 {
+            return Err(io::Error::other(OverBudget));
+        }
+        let room = usize::try_from(self.left).unwrap_or(usize::MAX);
+        let n = buf.len().min(room);
+        let got = self.inner.read(&mut buf[..n])?;
+        self.left = self.left.saturating_sub(got as u64);
+        Ok(got)
+    }
+}
+
+impl Seek for Metered<'_> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.inner.seek(pos)
+    }
+}
+
 /// A reader over the source that counts what it may still read.
 pub(super) struct Src<'a> {
-    inner: BufReader<&'a mut dyn diroxide_vfs::ReadSeek>,
+    inner: BufReader<Metered<'a>>,
     limits: HeaderLimits,
     parts: u32,
 }
 
 impl<'a> Src<'a> {
     pub(super) fn new(source: &'a mut dyn diroxide_vfs::ReadSeek, limits: HeaderLimits) -> Self {
+        let metered = Metered {
+            inner: source,
+            left: limits.max_bytes.saturating_add(READ_AHEAD),
+        };
         Self {
-            inner: BufReader::with_capacity(16 * 1024, source),
+            inner: BufReader::with_capacity(16 * 1024, metered),
             limits,
             parts: 0,
         }
@@ -136,7 +191,19 @@ impl<'a> Src<'a> {
         if at > self.limits.max_bytes {
             return Err(ImageError::HeaderTooLong);
         }
-        self.inner.seek(SeekFrom::Start(at))?;
+        // A seek inside what is buffered keeps the buffer, so walking a
+        // file's small boxes or chunks reads each byte once.
+        let here = self.pos()?;
+        match i64::try_from(at)
+            .ok()
+            .zip(i64::try_from(here).ok())
+            .and_then(|(at, here)| at.checked_sub(here))
+        {
+            Some(by) => self.inner.seek_relative(by)?,
+            None => {
+                self.inner.seek(SeekFrom::Start(at))?;
+            }
+        }
         Ok(())
     }
 
@@ -171,12 +238,23 @@ impl<'a> Src<'a> {
         Ok(out)
     }
 
+    /// The whole file, when it is no longer than `cap` and what is left
+    /// of the read's budget holds it; else nothing, so a picture whose
+    /// header has read is not refused for its Exif.
+    fn whole(&mut self, cap: u64) -> Result<Option<Vec<u8>>, ImageError> {
+        self.seek_to(0)?;
+        let want = usize::try_from(cap.saturating_add(1)).unwrap_or(usize::MAX);
+        match self.head(want) {
+            Ok(bytes) if bytes.len() as u64 <= cap => Ok(Some(bytes)),
+            Ok(_) | Err(ImageError::HeaderTooLong) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
     /// The source as a buffered reader for a decoder that reads its own
     /// header, from the start.
-    fn decoder_input(
-        &mut self,
-    ) -> Result<&mut BufReader<&'a mut dyn diroxide_vfs::ReadSeek>, ImageError> {
-        self.inner.seek(SeekFrom::Start(0))?;
+    fn decoder_input(&mut self) -> Result<&mut BufReader<Metered<'a>>, ImageError> {
+        self.seek_to(0)?;
         Ok(&mut self.inner)
     }
 }
@@ -615,10 +693,7 @@ pub(super) fn tiff(src: &mut Src<'_>, facts: &mut ImageFacts) -> Result<(), Imag
         }
         Err(e) => return Err(ImageError::Damaged(e.to_string())),
     }
-    src.seek_to(0)?;
-    let size_cap = limits.max_bytes.min(16 << 20);
-    let whole = src.head(usize::try_from(size_cap + 1).unwrap_or(usize::MAX))?;
-    if (whole.len() as u64) <= size_cap {
+    if let Some(whole) = src.whole(limits.max_bytes.min(16 << 20))? {
         super::exif::apply(whole, facts);
     }
     Ok(())
@@ -743,10 +818,8 @@ pub(super) fn heif(src: &mut Src<'_>, facts: &mut ImageFacts) -> Result<(), Imag
     }
     // The Exif item can sit anywhere in the file, so a small file is read
     // whole for it and a larger one goes without.
-    src.seek_to(0)?;
     let cap = src.limits.max_bytes.min(16 << 20);
-    let whole = src.head(usize::try_from(cap + 1).unwrap_or(usize::MAX))?;
-    if (whole.len() as u64) <= cap
+    if let Some(whole) = src.whole(cap)?
         && let Ok(exif) = ::exif::Reader::new().read_from_container(&mut io::Cursor::new(whole))
     {
         super::exif::apply_parsed(&exif, facts);
@@ -764,7 +837,8 @@ fn find_box(
 ) -> Result<Option<(u64, u64)>, ImageError> {
     let mut at = start;
     loop {
-        if end.is_some_and(|e| at + 8 > e) {
+        // A box's claimed size may carry `at` to the end of a u64.
+        if end.is_some_and(|e| at.saturating_add(8) > e) {
             return Ok(None);
         }
         src.part()?;

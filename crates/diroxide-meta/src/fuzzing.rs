@@ -95,6 +95,12 @@ pub fn checksum_list(bytes: &[u8]) -> usize {
             assert!(!entry.name.contains('\\'), "{:?}", entry.name);
             assert!(!entry.parts().contains(&".."), "{:?}", entry.name);
             assert!(!entry.parts().is_empty(), "{:?}", entry.name);
+            let first = entry.name.as_bytes();
+            assert!(
+                !(first.len() >= 2 && first[1] == b':' && first[0].is_ascii_alphabetic()),
+                "a drive in {:?}",
+                entry.name
+            );
         }
         let written: Vec<(String, Digest)> = list
             .entries
@@ -136,5 +142,25 @@ mod tests {
             "c".repeat(64)
         );
         assert_eq!(checksum_list(line.as_bytes()), 6);
+    }
+
+    /// The nightly fuzz run's `meta_checksum_list` crashes (Monday,
+    /// November 9 and Tuesday, November 10, 2026, runs 42686737704 and
+    /// 42860591272), as the logs printed them: a name `.\q:...` and one
+    /// `.\\\L::...`, whose `.` part dropped left a drive letter first, so
+    /// the list written from what was read read back without them. Each
+    /// is now refused when read, with neighbors.
+    #[test]
+    fn the_nightly_crash_inputs_read_back_the_same() {
+        let first: &[u8] =
+            b"87788873  .\\q:\xef\xb2\xbf\\ \xef\x9b+\xbf\xa2\x02\0\0\0\0\0\0\0\\:\xef\xb2\xbf";
+        let second: &[u8] = b"78878873  .\\\\\\L::::::::::::::::::::::::::::\\&\\ \0\n.6";
+        assert_eq!(checksum_list(first), 0);
+        assert_eq!(checksum_list(second), 0);
+        for name in ["./C:/x", ".\\C:x", "././c:", "a/./C:/x", "./a:b/c"] {
+            let line = format!("87788873  {name}\n");
+            let taken = checksum_list(line.as_bytes());
+            assert_eq!(taken, usize::from(name.starts_with("a/")) * 3, "{name}");
+        }
     }
 }

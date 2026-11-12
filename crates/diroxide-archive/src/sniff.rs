@@ -381,6 +381,18 @@ pub fn tool_signature_of_name(name: &str) -> Option<Signature> {
 /// least [`SNIFF_LEN`] bytes, and [`ISO_SNIFF_LEN`] to find an ISO image.
 pub fn sniff_signature(head: &[u8]) -> Option<Signature> {
     let starts = |magic: &[u8]| head.starts_with(magic);
+    // A tar's first bytes are its first member's name, which may spell
+    // any magic below (`hsqs`, `KDMV`, `LZIP`, `MSCF`): the nightly fuzz
+    // run's tar of a folder named `hsqs` was taken for a squashfs image.
+    // A tar header whose checksum holds is the stronger sign, so it is
+    // looked for first.
+    if tar_checksum_ok(head) {
+        return Some(if head.get(257..262) == Some(b"ustar".as_slice()) {
+            Signature::Tar
+        } else {
+            Signature::TarOld
+        });
+    }
     if starts(b"PK\x03\x04") {
         Some(Signature::Zip)
     } else if starts(b"PK\x05\x06") {
@@ -817,6 +829,49 @@ mod tests {
         assert_eq!(sniff_signature(&[0u8; 512]), None, "the end of a tar");
         assert_eq!(sniff_signature(b"BZh"), None, "no block size");
         assert_eq!(sniff_signature(b""), None);
+    }
+
+    /// A tar whose first member's name spells another format's magic is
+    /// a tar, old or ustar (the nightly fuzz run's `hsqs` and `KDMV`).
+    #[test]
+    fn a_tar_named_like_a_magic_is_a_tar() {
+        for magic in [
+            b"hsqs".as_slice(),
+            b"KDMV",
+            b"LZIP",
+            b"MSCF",
+            b"BZh9",
+            b"conectix",
+            b"070707",
+        ] {
+            for ustar in [false, true] {
+                let mut head = head_of(Signature::TarOld);
+                head[..7].fill(0);
+                head[..magic.len()].copy_from_slice(magic);
+                if ustar {
+                    head[257..263].copy_from_slice(b"ustar\0");
+                }
+                head[148..156].fill(0);
+                let sum: u32 = head
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &b)| {
+                        if (148..156).contains(&i) {
+                            32
+                        } else {
+                            u32::from(b)
+                        }
+                    })
+                    .sum();
+                head[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+                let want = if ustar {
+                    Signature::Tar
+                } else {
+                    Signature::TarOld
+                };
+                assert_eq!(sniff_signature(&head), Some(want), "{magic:?}");
+            }
+        }
     }
 
     #[test]
