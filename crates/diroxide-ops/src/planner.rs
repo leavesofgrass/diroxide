@@ -877,7 +877,10 @@ impl Engine {
                     OpsError::NameRefused(format!("A name cannot hold a slash: {name}"))
                 })?;
                 planner.stat(from)?;
-                let insensitive = !planner.provider(&folder)?.capabilities(&folder).case_sensitive;
+                let insensitive = !planner
+                    .provider(&folder)?
+                    .capabilities(&folder)
+                    .case_sensitive;
                 let key = if insensitive {
                     name.to_lowercase()
                 } else {

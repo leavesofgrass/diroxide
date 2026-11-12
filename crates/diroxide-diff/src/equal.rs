@@ -17,7 +17,8 @@ pub use diroxide_vfs::equal::{BLOCK_BYTES, Equality};
 
 /// Fills `buffer` from `reader` as far as it can: short only at the end.
 pub(crate) fn fill(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize, DiffError> {
-    diroxide_vfs::equal::fill(reader, buffer).map_err(|error| DiffError::Read(VfsError::from(error)))
+    diroxide_vfs::equal::fill(reader, buffer)
+        .map_err(|error| DiffError::Read(VfsError::from(error)))
 }
 
 /// Reads two streams side by side and says whether they are equal,

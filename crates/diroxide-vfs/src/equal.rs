@@ -220,7 +220,11 @@ mod tests {
         let cancel = CancelToken::new();
         cancel.cancel();
         assert_eq!(
-            equal(&mut Cursor::new(vec![1]), &mut Cursor::new(vec![1]), &cancel),
+            equal(
+                &mut Cursor::new(vec![1]),
+                &mut Cursor::new(vec![1]),
+                &cancel
+            ),
             Err(EqualStop::Stopped(VfsError::Cancelled))
         );
     }

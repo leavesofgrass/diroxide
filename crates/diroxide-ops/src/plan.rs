@@ -717,11 +717,12 @@ impl Plan {
                     .filter(|step| matches!(step, Step::Trash { .. } | Step::Remove { .. }))
                     .count() as u64;
                 let copies = self.steps.len() as u64 - gone;
-                let parts: Vec<String> = [(copies, "copy", "copies"), (gone, "removal", "removals")]
-                    .into_iter()
-                    .filter(|(n, _, _)| *n > 0)
-                    .map(|(n, one, many)| count(n, one, many))
-                    .collect();
+                let parts: Vec<String> =
+                    [(copies, "copy", "copies"), (gone, "removal", "removals")]
+                        .into_iter()
+                        .filter(|(n, _, _)| *n > 0)
+                        .map(|(n, one, many)| count(n, one, many))
+                        .collect();
                 match parts.as_slice() {
                     [] => "Synchronize: nothing to do".to_owned(),
                     parts => format!("Synchronize: {}", parts.join(", ")),
