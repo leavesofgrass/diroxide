@@ -721,6 +721,9 @@ pub struct Settings {
     pub replace_to_trash: bool,
     /// Refuse names other systems cannot store.
     pub portable_names: bool,
+    /// Keep the files opened or edited from diroxide in the recent list
+    /// (alpha.8's recent files).
+    pub recent_files: bool,
     /// The volumes the Volumes list leaves out, by device or place, as
     /// its Hide action keeps them (R25 3.1; lane A3).
     pub hidden_volumes: Vec<String>,
@@ -820,6 +823,7 @@ impl Default for Settings {
             trash_drives: vec!["fixed".to_owned()],
             replace_to_trash: true,
             portable_names: true,
+            recent_files: true,
             hidden_volumes: Vec::new(),
             jobs: JobSettings::default(),
             theme: diroxide_theme::DEFAULT_THEME.to_owned(),

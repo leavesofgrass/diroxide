@@ -348,7 +348,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 110] = [
+pub const SCHEMA: [SettingInfo; 111] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -620,6 +620,15 @@ pub const SCHEMA: [SettingInfo; 110] = [
         kind: K::Flag,
         default: "true",
         help: "Refuses names that other systems cannot store, such as a colon or a trailing space, when diroxide makes or renames an entry.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "recent_files",
+        name: "Remember recent files",
+        group: G::Safety,
+        kind: K::Flag,
+        default: "true",
+        help: "Keeps a list of the files opened or edited from diroxide, on this computer only. Off: nothing is kept, and the list is emptied.",
         arrives: None,
     },
     // The transfer queue (lane A2, R25 commit 80).
