@@ -13,7 +13,8 @@ use std::time::{Duration, Instant, SystemTime};
 use diroxide_core::{Attributes, Entry, Place, Timestamp};
 
 use super::Identity;
-use crate::local::entry::EntryContext;
+use crate::local::counting;
+use crate::local::entry::{EntryContext, HandleFacts};
 use crate::local::owners::Owners;
 use crate::local::volumes::{self, Mount, VolumeFacts};
 use crate::volume::VolumeKind;
@@ -100,8 +101,12 @@ pub(crate) fn is_hidden(name: &std::ffi::OsStr, metadata: Option<&Metadata>) -> 
     false
 }
 
-/// Nothing more to read: `lstat` gave every fact a stat needs.
-pub(crate) fn fill_from_handle(_entry: &mut Entry, _path: &Path) {}
+/// A stat: one `lstat`, which holds every fact a stat needs, so no
+/// handle is opened and the handle's facts stay unknown here.
+pub(crate) fn stat_once(path: &Path) -> io::Result<(Metadata, HandleFacts)> {
+    counting::looked_up();
+    std::fs::symlink_metadata(path).map(|metadata| (metadata, HandleFacts::default()))
+}
 
 /// Renames without ever replacing: `renameat2` with `RENAME_NOREPLACE`
 /// on Linux, `renameatx_np` with `RENAME_EXCL` on macOS, both atomic.

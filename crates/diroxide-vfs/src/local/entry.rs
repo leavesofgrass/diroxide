@@ -16,6 +16,7 @@ use std::sync::Arc;
 use diroxide_core::place::{ARCHIVE_EXTENSIONS, strip_extended_prefix};
 use diroxide_core::{Entry, EntryKind, Link, Timestamp};
 
+use super::counting;
 use super::owners::Owners;
 use crate::names;
 use crate::sys;
@@ -52,8 +53,24 @@ impl EntryContext {
 
 /// Whether a name ends with an archive extension after a stem that is not
 /// empty and not only dots, ignoring case: the files listed as archives,
-/// the same stem rule as the place parser's (`..zip` is no archive).
+/// the same stem rule as the place parser's (`..zip` is no archive). An
+/// ASCII name is compared byte by byte, with nothing allocated; any other
+/// goes through the full lower case, as before.
 pub(crate) fn has_archive_extension(name: &str) -> bool {
+    if name.is_ascii() {
+        let bytes = name.as_bytes();
+        return ARCHIVE_EXTENSIONS.iter().any(|ext| {
+            let ext = ext.as_bytes();
+            bytes.len() >= ext.len() && {
+                let (stem, tail) = bytes.split_at(bytes.len() - ext.len());
+                tail.iter()
+                    .zip(ext)
+                    .all(|(b, e)| b.to_ascii_lowercase() == *e)
+                    && !stem.is_empty()
+                    && !stem.iter().all(|b| *b == b'.')
+            }
+        });
+    }
     let lower = name.to_lowercase();
     ARCHIVE_EXTENSIONS.iter().any(|ext| {
         lower
@@ -92,6 +109,7 @@ pub(crate) fn kind_of_type(name: &str, file_type: FileType) -> EntryKind {
 /// prefix removed, since it is shown), and what the target is, or `None`
 /// when it is broken.
 pub(crate) fn link_of(path: &Path, name: &str) -> Link {
+    counting::looked_up();
     let target = fs::read_link(path)
         .map(|target| strip_extended_prefix(&target.to_string_lossy()).into_owned())
         .unwrap_or_default();
@@ -102,22 +120,58 @@ pub(crate) fn link_of(path: &Path, name: &str) -> Link {
 }
 
 /// An entry from its name and its metadata (read without following a
-/// final link). `path` is the entry's full path, used only to read a
-/// link's target.
-pub(crate) fn entry_from(
+/// final link). `path` gives the entry's full path, asked for only to
+/// read a link's target, so a listing builds no path for any other
+/// entry (PF, alpha 5).
+pub(crate) fn entry_from<P: AsRef<Path>>(
     name: String,
     metadata: &Metadata,
-    path: &Path,
+    path: impl FnOnce() -> P,
     context: &EntryContext,
 ) -> Entry {
     let kind = kind_of(&name, metadata);
     let mut entry = Entry::new(name, kind);
-    entry.needs_care = names::needs_care(&entry.name);
+    // `Entry::new` has looked for hidden characters already.
+    entry.needs_care = names::needs_care_given_hidden(&entry.name, entry.needs_care);
     fill_facts(&mut entry, metadata, context);
     if kind == EntryKind::Link {
-        entry.link = Some(link_of(path, &entry.name));
+        entry.link = Some(link_of(path().as_ref(), &entry.name));
     }
     entry
+}
+
+/// The facts a stat reads through the entry's handle on Windows, beside
+/// its metadata: the identity, the link count and the change time. Unix's
+/// `lstat` holds them all, so there they stay unknown here. A fact that
+/// could not be read stays as the metadata left it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct HandleFacts {
+    /// The volume's serial number.
+    pub(crate) volume: Option<u64>,
+    /// The file's id on its volume.
+    pub(crate) inode: Option<u64>,
+    /// The number of names the file has.
+    pub(crate) hard_links: Option<u64>,
+    /// When the entry's metadata last changed.
+    pub(crate) changed: Option<Timestamp>,
+}
+
+impl HandleFacts {
+    /// Adds the facts that were read to an entry.
+    pub(crate) fn apply(self, entry: &mut Entry) {
+        if let Some(volume) = self.volume {
+            entry.volume = Some(volume);
+        }
+        if let Some(inode) = self.inode {
+            entry.inode = Some(inode);
+        }
+        if let Some(links) = self.hard_links {
+            entry.hard_links = Some(links);
+        }
+        if let Some(changed) = self.changed {
+            entry.changed = Some(changed);
+        }
+    }
 }
 
 /// The facts metadata holds, added to an entry: the size of a file, the
@@ -189,7 +243,7 @@ impl LocalEntryBuilder {
     /// [`Entry::name_not_unicode`], as a listing marks it.
     pub fn entry(&self, name: &OsStr, path: &Path, metadata: &Metadata) -> Entry {
         let (text, lossy) = name_text(name);
-        let mut entry = entry_from(text, metadata, path, &self.context);
+        let mut entry = entry_from(text, metadata, || path, &self.context);
         entry.name_not_unicode = lossy;
         entry
     }
