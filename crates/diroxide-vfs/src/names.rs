@@ -254,9 +254,59 @@ pub fn check_name_with(name: &str, siblings: &[&str], rules: &NameRules) -> Vec<
     issues
 }
 
-/// Whether a name, on its own, needs care.
+/// Whether a name, on its own, needs care: the same answer as
+/// [`check_name`] with no siblings, without building its list, so a
+/// listing asks it of every entry for nothing but the scan (PF, alpha 5).
 pub fn needs_care(name: &str) -> bool {
-    !check_name(name, &[]).is_empty()
+    needs_care_given_hidden(name, has_hidden(name))
+}
+
+/// [`needs_care`] for a name whose hidden characters are already known
+/// (an [`diroxide_core::Entry::new`] has looked), so they are not looked
+/// for twice.
+pub(crate) fn needs_care_given_hidden(name: &str, hidden: bool) -> bool {
+    if hidden || name.is_empty() || name == "." || name == ".." {
+        return true;
+    }
+    if name.contains(|c| RESERVED_CHARACTERS.contains(&c) || SHELL_SPECIAL.contains(&c)) {
+        return true;
+    }
+    if name.ends_with(['.', ' ']) || name.starts_with(' ') {
+        return true;
+    }
+    if is_device_stem(name) {
+        return true;
+    }
+    let rules = NameRules::native();
+    rules.max_length.is_some_and(|max| {
+        // A UTF-16 count is never more than the bytes, so a short name
+        // is short either way.
+        name.len() > max
+            && if rules.length_in_utf16 {
+                name.encode_utf16().count() > max
+            } else {
+                true
+            }
+    })
+}
+
+/// Whether a name's stem (before its first dot, trailing spaces trimmed)
+/// is a Windows device name in any case, as [`check_name`] decides it:
+/// compared byte by byte when the stem is ASCII, through the full lower
+/// case otherwise (a Kelvin sign lowers to `k`).
+fn is_device_stem(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end();
+    if stem.is_ascii() {
+        DEVICE_NAMES.iter().any(|device| {
+            device.len() == stem.len()
+                && device
+                    .bytes()
+                    .zip(stem.bytes())
+                    .all(|(d, s)| d == s.to_ascii_lowercase())
+        })
+    } else {
+        DEVICE_NAMES.contains(&stem.to_lowercase().as_str())
+    }
 }
 
 /// The first issue that a place with these rules refuses for a new name,
@@ -476,5 +526,66 @@ mod tests {
         assert!(is_unfinished(&name));
         assert!(!is_unfinished(".diro-part-xyz"));
         assert!(!is_unfinished("report.pdf"));
+    }
+
+    /// The fast answer a listing asks is the full check's, name by name.
+    fn same_as_the_full_check(name: &str) {
+        assert_eq!(
+            needs_care(name),
+            !check_name(name, &[]).is_empty(),
+            "{name:?}"
+        );
+    }
+
+    #[test]
+    fn needs_care_answers_as_the_full_check_does() {
+        let long = "a".repeat(255);
+        let too_long = "a".repeat(256);
+        let cjk = "\u{6587}".repeat(100);
+        for name in [
+            "",
+            ".",
+            "..",
+            "...",
+            "report.pdf",
+            "Report (1).pdf",
+            "a:b",
+            "a/b",
+            "back\\slash",
+            "price $5",
+            "tick`",
+            "ends.",
+            "ends ",
+            " starts",
+            "CON",
+            "con.txt",
+            "Con .txt",
+            "nul",
+            "NUL.tar.gz",
+            "COM1",
+            "com\u{B9}",
+            "COM\u{B9}.log",
+            "lpt\u{B3}",
+            "console",
+            "co",
+            "\u{212A}",
+            "con\u{212A}",
+            "\u{130}nfo",
+            "zero\u{200B}width",
+            "bell\u{7}",
+            "caf\u{E9}",
+            long.as_str(),
+            too_long.as_str(),
+            cjk.as_str(),
+        ] {
+            same_as_the_full_check(name);
+        }
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn needs_care_agrees_on_any_name(name in "[a-zA-Z0-9 .:$`\u{B9}\u{212A}\u{130}\u{200B}\u{E9}]{0,12}") {
+            same_as_the_full_check(&name);
+        }
     }
 }
