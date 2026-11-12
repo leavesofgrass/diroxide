@@ -50,6 +50,8 @@ pub mod plan;
 mod planner;
 pub mod progress;
 pub mod queue;
+// The batch rename engine, the library half (alpha 5, lane BR).
+pub mod rename_rules;
 pub mod resume;
 #[cfg(test)]
 mod resume_tests;
