@@ -12,7 +12,7 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The quick view reads Markdown, plain text, code, the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira), pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets. [Previews](#previews) below says what it does not do.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools, previews, the file type model, columns, checksums, the privacy commands, conversions, watched folders, disk images, the git plugin, encryption and signatures, the access rows with Change time and Change owner, and the photo helpers are in alpha 4, and the sections below say what they do not do.
-- Tabs, the folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Compare files works on two files; two folders come in a later alpha.
+- The folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Tabs are the exception: [Tabs](#tabs) below says what they do not do yet. Compare files works on two files; two folders come in a later alpha.
 - A grid of thumbnails for the photo helpers, an editor for extended attributes, and tasks other than watched folders, such as synchronizing and renaming, come in a later alpha. Extended attributes are read for the details view and are not edited.
 - Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
@@ -25,7 +25,7 @@ Each item below was planned for alpha 4, is known, and was left for a later alph
 - Columns: a field has no sort value, so a duration sorts as text, and field columns have no header or grid. A cell says "reading" for a kind of file that no reader takes, until the readers have been through it.
 - Encryption: the Encryption plugin writes its files itself, so Undo for an age command lasts for the session only, and gpg's ASCII armor is not offered.
 - Photos: the Taken column reads the date to the minute. Move into month folders is planned by the program, so a plugin's before-move hook does not run for it. A row of the details list has no help of its own.
-- Speed: listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. [Other limits](#other-limits) has the numbers.
+- Speed: listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. Alpha 5 removes the two causes, and a quiet machine has not measured it yet. [Other limits](#other-limits) has the numbers.
 - The window: a paste under Wayland with no XWayland still reads nothing, and no real Wayland compositor has been tried.
 
 ## Plugins and script commands
@@ -162,6 +162,19 @@ Each item below was planned for alpha 4, is known, and was left for a later alph
 - "Stopped early" is worked out from the clock after the run, not reported by the comparing code.
 - When names cannot keep four cells in the 40-cell verdict line, the line leaves them out, and the next line names the files.
 - The deadline, the text limit and how the three line algorithms compare have starting values that have not been tuned on a quiet machine.
+
+## Tabs
+
+This section is for alpha 5, which has not been released. [Tabs](tabs.md) is the guide.
+
+- No tab bar is drawn, in the window or in the terminal. A tab is said in words ("Documents, tab 2 of 3") and the tab list shows them all. Nothing about tabs is said while a panel has one tab.
+- A locked tab that is alone in its panel shows no lock in the title line, since nothing about tabs is said with one tab. Lock tab says the state when you press it.
+- Changing the column setting updates only the tab that is shown.
+- A tab you are not in does not watch its folder. It lists the folder again when you come back to it.
+- Undo close tab holds the last 16 closed tabs, for this session only. No command deletes or renames a saved tab set; a set is replaced by saving under its name again.
+- A tab set and a session keep each tab's folder, cursor row, sort, hidden files, history and lock. Marks, the filter and the columns are not kept.
+- Going back to alpha 4 loses the tabs. The session file's version is 2 in alpha 5, with each panel's tabs beside the two panels. Alpha 4 reads the panels as before and shows one folder in each, and when it writes the file at its quit, the other tabs are gone. Saved tab sets in `tab-sets.toml` are a file alpha 4 does not read.
+- The tests this page was written from open folders on the local disk. A tab on an SFTP place, inside an archive or on a plugin's list has not been tried. Nothing about tabs has been heard on NVDA, JAWS or Orca, or read on a Braille display.
 
 ## Keys and presets
 
@@ -550,7 +563,7 @@ Menus and the mouse:
 - Cut, copy and paste of files (Ctrl+X, Ctrl+C, Ctrl+V) work between diroxide's own panels. They do not use the system clipboard, so Explorer and the Finder cannot paste what diroxide copied.
 - Cloud files that are only online are named "online only". diroxide asks before it reads their contents.
 - The terminal frontend has no mouse.
-- Listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. On the bench machine, quiet, 100,000 entries list in 134 ms and are read for their details in 6.66 seconds, where that October code, run on the same machine, took 97 ms and 4.4 seconds. The cause is known: the details read opens each file a second time, and a listing builds every entry's full path, checks every name for an unfinished copy and reads the platform's attributes. It is the first performance work of a later alpha. [The bench](dev/bench.md) has the other numbers.
+- Listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. On the bench machine, quiet, 100,000 entries list in 134 ms and are read for their details in 6.66 seconds, where that October code, run on the same machine, took 97 ms and 4.4 seconds. The cause is known: the details read opens each file a second time, and a listing builds every entry's full path, checks every name for an unfinished copy and reads the platform's attributes. Alpha 5 has removed both causes: a stat opens each entry once, and a listing builds an entry's full path only for a link. It was measured back to back with the old code on a busy machine only, so whether the quiet numbers are back to 97 ms and 4.4 seconds waits for the next saved baseline. [The bench](dev/bench.md) has the other numbers.
 - How long before a copy is called stalled (20 seconds), and whether it keeps dates or checks a move, are built into the job engine. They are not settings. The number of tries on a lost network and the first wait are settings, in the Jobs and transfers group.
 
 ## See also
