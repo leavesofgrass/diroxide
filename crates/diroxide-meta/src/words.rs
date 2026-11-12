@@ -119,6 +119,22 @@ pub fn iso_date_words(text: &str) -> Option<String> {
     date_words(year, month, day, time)
 }
 
+/// An ISO 8601 or Exif date and time in words to the second, sortable
+/// as text: "2026-11-06 08:00:05", for what needs more than the minute
+/// (bursts of photos a second apart). `None` when the text has no
+/// seconds or a part is out of range.
+pub fn iso_second_words(text: &str) -> Option<String> {
+    let text = text.trim();
+    if !matches!(text.as_bytes().get(13), Some(b':'))
+        || !matches!(text.as_bytes().get(16), Some(b':'))
+    {
+        return None;
+    }
+    let minute = iso_date_words(text.get(..16)?)?;
+    let second = digits(text, 17, 2)?;
+    (second < 60 && minute.len() == 16).then(|| format!("{minute}:{second:02}"))
+}
+
 /// A place on the earth in words, `decimals` after the point (two by
 /// default, about a kilometer: R28's location risk), with north, south,
 /// east and west: "45.50 north, 122.69 west".
@@ -187,6 +203,23 @@ mod tests {
         assert_eq!(iso_date_words("2026").as_deref(), Some("2026"));
         assert_eq!(iso_date_words("0000:00:00 00:00:00"), None);
         assert_eq!(iso_date_words("2026-1"), None);
+    }
+
+    #[test]
+    fn a_date_to_the_second_needs_its_seconds() {
+        assert_eq!(
+            iso_second_words("2001:01:01 08:30:07").as_deref(),
+            Some("2001-01-01 08:30:07")
+        );
+        assert_eq!(
+            iso_second_words("2026-11-06T08:00:59Z").as_deref(),
+            Some("2026-11-06 08:00:59")
+        );
+        assert_eq!(iso_second_words("2026-11-06 08:00"), None);
+        assert_eq!(iso_second_words("2026-11-06"), None);
+        assert_eq!(iso_second_words("2026:11:06 08:00:61"), None);
+        assert_eq!(iso_second_words("2026:13:06 08:00:00"), None);
+        assert_eq!(iso_second_words("2026:11:06 08:00:0"), None);
     }
 
     #[test]
