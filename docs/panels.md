@@ -165,6 +165,10 @@ A plugin can show a list of rows that are not files inside a panel, such as the 
 - The list is not saved when you quit.
 - The other panel's folder beneath a list is still where F5 and F6 copy and move to. The confirmation names it.
 
+## Tabs
+
+Each panel can hold several folders at once, as tabs. Ctrl+T opens a new tab, a copy of the one you are in, and Ctrl+W closes it. With more than one tab the title line and each arrival say the tab after the folder: "diroxide-app, tab 2 of 2". With one tab nothing is said about tabs. [Tabs](tabs.md) has the rest: switching, the lock and the pin, Undo close tab, the tab list and saved tab sets.
+
 ## Refresh and watching
 
 diroxide watches the folders on screen on a fixed local drive and merges outside changes into the list. "Folder changed: 2 added, 1 removed" is said when it matters, not on every change. If the folder you are in is renamed or deleted, diroxide says "Folder is gone" and goes up to the nearest folder that still exists. A folder that cannot be watched says so: "Folder not watched. Reload with Ctrl+R." That is always true of network drives and of removable drives, which diroxide checks again when you return to the panel and every two seconds.
@@ -173,10 +177,11 @@ To be told when a new file has finished arriving, use Watch this folder in the V
 
 ## The session
 
-When you quit, diroxide remembers each panel's folder, the focused row, the sort, whether hidden files are shown, the folders you visited for back and forward, the layout and which panel was active, and puts them back at the next start. A folder with a saved view of its own gets that view whenever you enter it ([labels and bookmarks](labels-bookmarks.md)).
+When you quit, diroxide remembers each panel's folder, the focused row, the sort, whether hidden files are shown, the folders you visited for back and forward, the layout and which panel was active, and puts them back at the next start. When a panel has more than one tab, every tab is remembered the same way ([tabs](tabs.md)). A folder with a saved view of its own gets that view whenever you enter it ([labels and bookmarks](labels-bookmarks.md)).
 
 ## See also
 
+- [Tabs](tabs.md)
 - [Columns, notes and fields](columns.md)
 - [Photos](photos.md)
 - [Operations and undo](operations.md)
