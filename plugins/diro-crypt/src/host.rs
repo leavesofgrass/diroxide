@@ -1,11 +1,13 @@
 //! The plugin's calls to the host: a sentence (`ui/announce`), a hidden
-//! or path question (`ui/ask`), a form (`ui/form`) and a job's progress
-//! (`$/progress`). Nothing else: the plugin reads and writes the owner's
-//! files itself, through the local provider's committing writer.
+//! or path question (`ui/ask`), a form (`ui/form`), a job's progress
+//! (`$/progress`), and an output's stage and commit (`fs/stage`,
+//! `fs/commit`). The plugin reads the owner's files itself and writes
+//! each output to the stage diroxide gives; diroxide moves it into place.
 //!
 //! A secret the host sends back is taken into age's own wiping string at
 //! once, and never written to the log, standard error or a sentence.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -14,12 +16,17 @@ use age::secrecy::SecretString;
 use diroxide_plugins::protocol::{Params, methods};
 use serde_json::{Map, Value, json};
 
+use crate::crypt::{Failure, Staged, Stager};
 use crate::error::CryptError;
 use crate::rpc::{Cancel, Peer};
 
 /// How long a question to the owner may stay open: the owner's thinking
 /// time is the owner's, and the host stops the wait if it goes away.
 pub const OWNER_WAIT: Duration = Duration::from_secs(24 * 3600);
+
+/// How long a stage or a commit may take: a rename in one folder, or a
+/// numbered name found; far less than this.
+pub const HOST_WAIT: Duration = Duration::from_secs(120);
 
 /// A request's way to the host: the peer and the request's cancel flag.
 #[derive(Clone, Copy)]
@@ -123,6 +130,62 @@ impl Host<'_> {
             .get("text")
             .and_then(Value::as_str)
             .map(str::to_owned))
+    }
+}
+
+/// A host's answer that failed, as a file's failure in words.
+fn host_failure(error: &CryptError) -> Failure {
+    let words = error.to_string();
+    let mut chars = words.chars();
+    let lower: String = match chars.next() {
+        Some(first) => first.to_lowercase().chain(chars).collect(),
+        None => "diroxide gave no reason".to_owned(),
+    };
+    Failure::Words(lower)
+}
+
+/// Outputs go through diroxide (`fs/stage` and `fs/commit`, the
+/// manifest's `permissions.fs = "write"`): the made file joins the
+/// running command's Undo, and the rename never replaces a file.
+impl Stager for Host<'_> {
+    fn stage(&self, output: &Path) -> Result<Staged, Failure> {
+        let answer = self
+            .peer
+            .call(
+                methods::FS_STAGE,
+                object(json!({"place": output.display().to_string()})),
+                Some(self.cancel),
+                HOST_WAIT,
+            )
+            .map_err(|e| host_failure(&CryptError::from(e)))?;
+        let id = answer.get("stage").and_then(Value::as_str);
+        let path = answer.get("path").and_then(Value::as_str);
+        match (id, path) {
+            (Some(id), Some(path)) => Ok(Staged {
+                id: id.to_owned(),
+                path: PathBuf::from(path),
+            }),
+            _ => Err(Failure::Words("diroxide gave no stage for it".to_owned())),
+        }
+    }
+
+    fn commit(&self, staged: &Staged) -> Result<PathBuf, Failure> {
+        // The commit is not cancelled with the request: a written output
+        // is placed, or its stage is removed by the caller.
+        let answer = self
+            .peer
+            .call(
+                methods::FS_COMMIT,
+                object(json!({"stage": staged.id})),
+                None,
+                HOST_WAIT,
+            )
+            .map_err(|e| host_failure(&CryptError::from(e)))?;
+        answer
+            .get("place")
+            .and_then(Value::as_str)
+            .map(PathBuf::from)
+            .ok_or_else(|| Failure::Words("diroxide did not say where it is".to_owned()))
     }
 }
 

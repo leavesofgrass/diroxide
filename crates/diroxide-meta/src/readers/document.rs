@@ -146,12 +146,15 @@ pub(crate) fn pdf_fields(bytes: &[u8]) -> Result<Vec<Field>, MetaError> {
         meta.modification_date.as_deref().and_then(pdf_date_words),
     );
     if meta.page_count > 0 {
-        fields.push(Field::new(
-            "doc.pages",
-            "Pages",
-            grouped(u64::from(meta.page_count)),
-            DetailGroup::Content,
-        ));
+        fields.push(
+            Field::new(
+                "doc.pages",
+                "Pages",
+                grouped(u64::from(meta.page_count)),
+                DetailGroup::Content,
+            )
+            .sorted_by_count(u64::from(meta.page_count)),
+        );
     }
     fields.text(
         "doc.pdf_version",
@@ -171,12 +174,15 @@ pub(crate) fn pdf_fields(bytes: &[u8]) -> Result<Vec<Field>, MetaError> {
         DetailGroup::Flags,
     ));
     if !meta.custom.is_empty() {
-        fields.push(Field::new(
-            "doc.custom",
-            "Custom properties",
-            grouped(meta.custom.len() as u64),
-            DetailGroup::Technical,
-        ));
+        fields.push(
+            Field::new(
+                "doc.custom",
+                "Custom properties",
+                grouped(meta.custom.len() as u64),
+                DetailGroup::Technical,
+            )
+            .sorted_by_count(meta.custom.len() as u64),
+        );
     }
     Ok(fields.0)
 }
@@ -310,12 +316,15 @@ impl Fields {
 
     fn number(&mut self, key: &str, label: &str, value: Option<&str>, suffix: &str) {
         if let Some(n) = value.and_then(|v| v.trim().parse::<u64>().ok()) {
-            self.0.push(Field::new(
-                key,
-                label,
-                format!("{}{suffix}", grouped(n)),
-                DetailGroup::Content,
-            ));
+            self.0.push(
+                Field::new(
+                    key,
+                    label,
+                    format!("{}{suffix}", grouped(n)),
+                    DetailGroup::Content,
+                )
+                .sorted_by_count(n),
+            );
         }
     }
 }

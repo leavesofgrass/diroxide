@@ -61,6 +61,7 @@ pub mod ask;
 pub mod base64;
 mod calls;
 pub mod conformance;
+pub mod converters;
 pub mod error;
 pub mod files;
 pub mod framing;

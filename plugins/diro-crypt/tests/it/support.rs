@@ -108,6 +108,10 @@ pub struct Seen {
     pub progress: Vec<Value>,
     /// Every line the plugin wrote, whole.
     pub wire: Vec<String>,
+    /// Each output diroxide placed through `fs/commit`.
+    pub committed: Vec<PathBuf>,
+    /// The stages handed out and not committed yet: id, file, output.
+    pub open_stages: Vec<(String, PathBuf, PathBuf)>,
 }
 
 impl Seen {
@@ -247,6 +251,54 @@ impl FakeHost {
                     .pop_front()
                     .unwrap_or_else(|| json!({"cancelled": true}));
                 self.answer(&id, answer);
+            }
+            // As the host's staging: a `.diro-part-` name beside the
+            // output, refused when the output's name is taken; the commit
+            // a rename never over a file, a taken name numbered.
+            "fs/stage" => {
+                let output = PathBuf::from(params["place"].as_str().unwrap_or(""));
+                if output.exists() {
+                    self.send(&json!({"jsonrpc": "2.0", "id": id,
+                        "error": {"code": -32010, "message": "it exists; stage another name"}}));
+                    return;
+                }
+                self.next += 1;
+                let stage = format!("{:08x}", self.next);
+                let path = output
+                    .parent()
+                    .unwrap()
+                    .join(format!(".diro-part-{stage}.age"));
+                self.seen
+                    .open_stages
+                    .push((stage.clone(), path.clone(), output));
+                self.answer(
+                    &id,
+                    json!({"stage": stage, "path": path.display().to_string()}),
+                );
+            }
+            "fs/commit" => {
+                let stage = params["stage"].as_str().unwrap_or("");
+                let at = self.seen.open_stages.iter().position(|(s, ..)| s == stage);
+                let Some(at) = at else {
+                    self.send(&json!({"jsonrpc": "2.0", "id": id,
+                        "error": {"code": -32004, "message": format!("no stage is named {stage}")}}));
+                    return;
+                };
+                let (_, path, output) = self.seen.open_stages.remove(at);
+                let mut target = output.clone();
+                let mut n = 1;
+                while target.exists() {
+                    n += 1;
+                    let name = output.file_name().unwrap().to_string_lossy();
+                    target = output.with_file_name(format!("{name} ({n})"));
+                }
+                std::fs::rename(&path, &target).unwrap();
+                self.seen.committed.push(target.clone());
+                let name = target.file_name().unwrap().to_string_lossy().into_owned();
+                self.answer(
+                    &id,
+                    json!({"committed": true, "place": target.display().to_string(), "name": name}),
+                );
             }
             other => {
                 self.send(&json!({"jsonrpc": "2.0", "id": id,

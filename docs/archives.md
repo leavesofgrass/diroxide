@@ -130,7 +130,7 @@ Pack runs the same test on its own result, which is where "Checked 2 of 2 entrie
 RAR, CAB, ARJ, LZH, RPM, cpio and ar archives, a spanned zip set, and a disk image that no disk plugin takes are read by the 7-Zip program. diroxide starts it for each job with a list of arguments, never through a shell. These archives open like any other, read only.
 
 - The title says so: "Backup.rar, read with 7-Zip, in D:\docs". The format still comes from the file's first bytes, not only its name.
-- diroxide never writes them. Delete, rename and make folder inside one say "RAR is read only: diroxide never writes it", and Pack never offers RAR.
+- diroxide never writes them. Delete, rename and make folder inside one say "RAR is read only in diroxide", and Pack never offers RAR.
 - Any 7-Zip lists an archive and reads one member at a time. Unpacking to disk needs 7-Zip 25.01 or later, which fixed two bugs in how older versions make links. With an older one, the archive still opens, a line after the opening says "7-Zip 24.08 is too old: needs 25.01", and an unpack says "Could not unpack Backup.rar: 7-Zip 24.08 is too old: needs 25.01."
 - Without 7-Zip, opening says "Could not open Backup.rar: it needs 7-Zip. Get it from Manage optional components, then try again." An unpack or an edit says the format first: "RAR needs 7-Zip: not installed", then the same way to get it. The components list asks before it fetches anything, and for RAR it adds that diroxide never writes the format. [Optional components](components.md) says how to get 7-Zip on each system.
 - These archives are read one member at a time, and a solid one can only be read from its start, so the question "Read 3.2 GB first to open note.txt? No is the default. y or n" applies.

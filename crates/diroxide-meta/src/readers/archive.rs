@@ -90,13 +90,15 @@ impl Reader for ZipFacts {
             entries = format!("at least {entries}");
         }
         let mut fields = vec![
-            Field::new("archive.entries", "Entries", entries, DetailGroup::Content),
+            Field::new("archive.entries", "Entries", entries, DetailGroup::Content)
+                .sorted_by_count(files.saturating_add(folders)),
             Field::new(
                 "archive.unpacked",
                 "Unpacked",
                 format!("{}, packed {}", human_size(unpacked), human_size(packed)),
                 DetailGroup::Size,
-            ),
+            )
+            .sorted_by_count(unpacked),
             Field::new(
                 "archive.encrypted",
                 "Encrypted",
@@ -210,6 +212,28 @@ pub(crate) mod tests {
             lines(zip_of(&[], "")).unwrap()[0],
             "Entries: no files, no folders"
         );
+    }
+
+    #[test]
+    fn the_counts_and_the_size_sort_as_numbers() {
+        let bytes = zip_of(&[("docs/", b""), ("a.txt", &[b'a'; 1500])], "");
+        let place = Place::parse(if cfg!(windows) { "C:\\b.zip" } else { "/b.zip" }).unwrap();
+        let entry = Entry::new("bundle.zip", EntryKind::File);
+        let request = ReadRequest {
+            place: &place,
+            entry: &entry,
+            type_id: None,
+            group: None,
+            cancel: None,
+            tools: None,
+        };
+        let fields = ZipFacts
+            .read(&mut Cursor::new(bytes), &request, &ReadLimits::default())
+            .unwrap();
+        let sort = |key: &str| fields.iter().find(|f| f.key == key).and_then(|f| f.sort);
+        assert_eq!(sort("archive.entries"), Some(2));
+        assert_eq!(sort("archive.unpacked"), Some(1500));
+        assert_eq!(sort("archive.encrypted"), None);
     }
 
     #[test]

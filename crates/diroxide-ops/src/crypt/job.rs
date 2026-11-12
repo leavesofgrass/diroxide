@@ -646,17 +646,17 @@ impl Engine {
                     "a file's passphrase".to_owned(),
                     SecretRequest::new(SecretKind::FilePassphrase, name.clone()),
                 ),
-                // The words whole, as a question in its own words: the
-                // core's title leaves 14 cells for a subject and would cut
-                // "key ending 4E7B" (15) to "key endin...7B" (a contract
-                // request, CR1).
+                // A key's passphrase is a file passphrase whose subject
+                // is the key: the core's title keeps "key ending 4E7B"
+                // whole in 40 cells (lane AE's request 2), and reads
+                // "Passphrase for key ending 4E7B", as `lines` says it.
                 (Some(key), false) => (
                     key.clone(),
-                    SecretRequest::new(SecretKind::ServerPrompt, lines::key_passphrase(Some(key))),
+                    SecretRequest::new(SecretKind::FilePassphrase, lines::key_subject(Some(key))),
                 ),
                 (None, false) => (
                     "the default key".to_owned(),
-                    SecretRequest::new(SecretKind::ServerPrompt, lines::key_passphrase(None)),
+                    SecretRequest::new(SecretKind::FilePassphrase, lines::key_subject(None)),
                 ),
             };
             let mut try_held = held.by_key.get(&slot).cloned();

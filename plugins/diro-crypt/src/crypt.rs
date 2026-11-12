@@ -1,10 +1,11 @@
 //! One file encrypted or decrypted with age, streamed: read in 64 KiB
-//! pieces, written through the local provider's committing writer (an
-//! unfinished `.diro-part-` name in the target folder, renamed last with a
-//! rename that never replaces), the cancel looked at between pieces, the
-//! share done reported as it goes. A cancel or a failure drops the writer,
-//! which removes its unfinished file, so nothing half-made is ever seen
-//! under a real name. The original is never touched.
+//! pieces, written to a stage diroxide hands out (`fs/stage`: an
+//! unfinished `.diro-part-` name in the target folder) and moved into
+//! place by diroxide (`fs/commit`: a rename that never replaces, the made
+//! file joining the command's Undo), the cancel looked at between pieces,
+//! the share done reported as it goes. A cancel or a failure removes the
+//! stage's file, so nothing half-made is ever seen under a real name. The
+//! original is never touched.
 //!
 //! A passphrase is used at work factor [`WORK_FACTOR`] and accepted up to
 //! [`WORK_CAP`]; an identity's keys stay in memory only for the command
@@ -18,8 +19,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use age::armor::{ArmoredReader, ArmoredWriter, Format};
 use age::secrecy::SecretString;
-use diroxide_core::Place;
-use diroxide_vfs::{FileWriter, LocalProvider, OpContext, Provider, VfsError, WriteMode};
+use diroxide_vfs::VfsError;
 
 use crate::header::{WORK_CAP, WORK_FACTOR};
 use crate::lines;
@@ -27,10 +27,6 @@ use crate::names;
 
 /// How much is read and written at a time.
 pub const CHUNK: usize = 64 * 1024;
-
-/// How many times a name taken between the look and the rename is tried
-/// again with the next number.
-const NAME_TRIES: usize = 3;
 
 /// What encrypts a file.
 pub enum Lock<'a> {
@@ -119,10 +115,6 @@ fn lower_first(text: &str) -> String {
     }
 }
 
-fn vfs_words(error: &VfsError) -> Failure {
-    Failure::Words(lower_first(&error.to_string()))
-}
-
 /// A reader that counts what passed through it.
 struct Counting<R> {
     inner: R,
@@ -173,49 +165,100 @@ fn split(source: &Path) -> Result<(PathBuf, String), Failure> {
     Ok((folder.to_path_buf(), name))
 }
 
-/// A writer to fill: given back filled to be committed, `None` when
-/// cancelled, or the reason it was not filled.
-type Fill<'a> = dyn FnMut(Box<dyn FileWriter>) -> Result<Option<Box<dyn FileWriter>>, Failure> + 'a;
-
-/// Writes through the committing writer under the first free name made
-/// from `wanted`, trying the next number when a name is taken between
-/// the look and the rename. `write` fills the writer and gives it back
-/// to be committed, or says why not.
-fn write_new(folder: &Path, wanted: &str, write: &mut Fill<'_>) -> End {
-    let provider = LocalProvider::new();
-    let ctx = OpContext::new();
-    for _ in 0..NAME_TRIES {
-        let Some(name) = names::free_name(folder, wanted) else {
-            return End::Failed(Failure::Words("no free name is left for it".to_owned()));
-        };
-        let path = folder.join(&name);
-        let place = match Place::parse(&path.display().to_string()) {
-            Ok(place) => place,
-            Err(_) => return End::Failed(Failure::Words("its name cannot be made".to_owned())),
-        };
-        let writer = match provider.write(&place, WriteMode::CreateNew, &ctx) {
-            Ok(writer) => writer,
-            Err(VfsError::AlreadyExists) => continue,
-            Err(error) => return End::Failed(vfs_words(&error)),
-        };
-        let writer = match write(writer) {
-            Ok(Some(writer)) => writer,
-            Ok(None) => return End::Cancelled,
-            Err(failure) => return End::Failed(failure),
-        };
-        match writer.commit(true) {
-            Ok(()) => return End::Made(path),
-            Err(VfsError::AlreadyExists) => continue,
-            Err(error) => return End::Failed(vfs_words(&error)),
-        }
-    }
-    End::Failed(Failure::Words(
-        "its name was taken while it was written".to_owned(),
-    ))
+/// An output staged by diroxide: its stage's id and the path the plugin
+/// writes the whole output to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Staged {
+    /// The stage's id, for the commit.
+    pub id: String,
+    /// Where the output's bytes go until the commit.
+    pub path: PathBuf,
 }
 
-/// Encrypts one file into `NAME.age` beside it.
-pub fn encrypt_file(source: &Path, lock: &Lock<'_>, armor: bool, watch: &mut Watch<'_>) -> End {
+/// Where outputs are made: diroxide's `fs/stage` and `fs/commit` (the
+/// host, [`crate::host::Host`]), so the made file joins the command's
+/// Undo record and the rename never replaces a file.
+pub trait Stager {
+    /// A stage for an output at `output`, a free name in its folder.
+    fn stage(&self, output: &Path) -> Result<Staged, Failure>;
+
+    /// Moves a written stage into place; the made file's path (a name
+    /// taken meanwhile is numbered by diroxide).
+    fn commit(&self, staged: &Staged) -> Result<PathBuf, Failure>;
+}
+
+/// A writer to fill: given back filled to be committed, `None` when
+/// cancelled, or the reason it was not filled.
+type Fill<'a> = dyn FnMut(Box<dyn Write>) -> Result<Option<Box<dyn Write>>, Failure> + 'a;
+
+/// Removes a stage the plugin wrote and does not commit: its own
+/// unfinished file, so nothing half-made is left (diroxide also removes
+/// an uncommitted stage when the session ends).
+fn discard(staged: &Staged) {
+    let _ = std::fs::remove_file(&staged.path);
+}
+
+/// Writes a new output named from `wanted` (the first free name) through
+/// a stage: `write` fills the stage's file and gives it back to be
+/// committed, or says why not; the file is flushed to the disk before
+/// the commit.
+fn write_new(out: &dyn Stager, folder: &Path, wanted: &str, write: &mut Fill<'_>) -> End {
+    let Some(name) = names::free_name(folder, wanted) else {
+        return End::Failed(Failure::Words("no free name is left for it".to_owned()));
+    };
+    let staged = match out.stage(&folder.join(&name)) {
+        Ok(staged) => staged,
+        Err(failure) => return End::Failed(failure),
+    };
+    let file = match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staged.path)
+    {
+        Ok(file) => file,
+        Err(error) => return End::Failed(io_words(&error)),
+    };
+    let filled = write(Box::new(io::BufWriter::with_capacity(CHUNK, file)));
+    let mut writer = match filled {
+        Ok(Some(writer)) => writer,
+        Ok(None) => {
+            discard(&staged);
+            return End::Cancelled;
+        }
+        Err(failure) => {
+            discard(&staged);
+            return End::Failed(failure);
+        }
+    };
+    let flushed = writer.flush();
+    drop(writer);
+    let synced = flushed.and_then(|()| {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&staged.path)?
+            .sync_all()
+    });
+    if let Err(error) = synced {
+        discard(&staged);
+        return End::Failed(io_words(&error));
+    }
+    match out.commit(&staged) {
+        Ok(path) => End::Made(path),
+        Err(failure) => {
+            discard(&staged);
+            End::Failed(failure)
+        }
+    }
+}
+
+/// Encrypts one file into `NAME.age` beside it, through `out`'s stage.
+pub fn encrypt_file(
+    source: &Path,
+    lock: &Lock<'_>,
+    armor: bool,
+    out: &dyn Stager,
+    watch: &mut Watch<'_>,
+) -> End {
     let (folder, name) = match split(source) {
         Ok(parts) => parts,
         Err(failure) => return End::Failed(failure),
@@ -226,7 +269,7 @@ pub fn encrypt_file(source: &Path, lock: &Lock<'_>, armor: bool, watch: &mut Wat
         Err(error) => return End::Failed(io_words(&error)),
     };
     let wanted = names::encrypted_name(&name);
-    let mut write = |writer: Box<dyn FileWriter>| {
+    let mut write = |writer: Box<dyn Write>| {
         let encryptor = match lock {
             Lock::Passphrase(passphrase) => {
                 let mut recipient = age::scrypt::Recipient::new((*passphrase).clone());
@@ -258,11 +301,17 @@ pub fn encrypt_file(source: &Path, lock: &Lock<'_>, armor: bool, watch: &mut Wat
         let writer = armored.finish().map_err(|e| io_words(&e))?;
         Ok(Some(writer))
     };
-    write_new(&folder, &wanted, &mut write)
+    write_new(out, &folder, &wanted, &mut write)
 }
 
-/// Decrypts one file into `NAME` (with `.age` removed) beside it.
-pub fn decrypt_file(source: &Path, unlock: &Unlock<'_>, watch: &mut Watch<'_>) -> End {
+/// Decrypts one file into `NAME` (with `.age` removed) beside it,
+/// through `out`'s stage.
+pub fn decrypt_file(
+    source: &Path,
+    unlock: &Unlock<'_>,
+    out: &dyn Stager,
+    watch: &mut Watch<'_>,
+) -> End {
     let (folder, name) = match split(source) {
         Ok(parts) => parts,
         Err(failure) => return End::Failed(failure),
@@ -273,7 +322,7 @@ pub fn decrypt_file(source: &Path, unlock: &Unlock<'_>, watch: &mut Watch<'_>) -
         Err(error) => return End::Failed(io_words(&error)),
     };
     let wanted = names::decrypted_name(&name);
-    let mut write = |mut writer: Box<dyn FileWriter>| {
+    let mut write = |mut writer: Box<dyn Write>| {
         let file = File::open(source).map_err(|e| io_words(&e))?;
         let done = Arc::new(AtomicU64::new(0));
         let reader = Counting {
@@ -298,7 +347,7 @@ pub fn decrypt_file(source: &Path, unlock: &Unlock<'_>, watch: &mut Watch<'_>) -
         }
         Ok(Some(writer))
     };
-    write_new(&folder, &wanted, &mut write)
+    write_new(out, &folder, &wanted, &mut write)
 }
 
 /// A decryption's failure in words.
@@ -339,6 +388,39 @@ mod tests {
         (|| false, |_, _| {})
     }
 
+    /// diroxide's stage and commit, as the host does them, on the disk:
+    /// an unfinished name in the output's folder, then a rename onto the
+    /// output's name when it is free.
+    struct Here;
+
+    impl Stager for Here {
+        fn stage(&self, output: &Path) -> Result<Staged, Failure> {
+            let folder = output.parent().unwrap();
+            let id = format!(
+                "{:08x}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .subsec_nanos()
+            );
+            let path = folder.join(format!(".diro-part-{id}.age"));
+            let target = output.display().to_string();
+            Ok(Staged {
+                id: format!("{id}|{target}"),
+                path,
+            })
+        }
+
+        fn commit(&self, staged: &Staged) -> Result<PathBuf, Failure> {
+            let target = PathBuf::from(staged.id.split_once('|').unwrap().1);
+            if target.exists() {
+                return Err(Failure::Words("it exists".to_owned()));
+            }
+            std::fs::rename(&staged.path, &target).unwrap();
+            Ok(target)
+        }
+    }
+
     fn made(end: End) -> PathBuf {
         match end {
             End::Made(path) => path,
@@ -362,6 +444,7 @@ mod tests {
             &source,
             &Lock::Passphrase(&pass),
             false,
+            &Here,
             &mut watch,
         ));
         assert_eq!(out.file_name().unwrap(), "report.pdf.age");
@@ -374,7 +457,12 @@ mod tests {
             "made at the reference default"
         );
         // Decrypting beside it: report.pdf is taken, so a number is added.
-        let back = made(decrypt_file(&out, &Unlock::Passphrase(&pass), &mut watch));
+        let back = made(decrypt_file(
+            &out,
+            &Unlock::Passphrase(&pass),
+            &Here,
+            &mut watch,
+        ));
         assert_eq!(back.file_name().unwrap(), "report (2).pdf");
         assert_eq!(std::fs::read(&back).unwrap(), body);
         // Nothing unfinished is left.
@@ -402,6 +490,7 @@ mod tests {
             &source,
             &Lock::Recipients(&recipients),
             true,
+            &Here,
             &mut watch,
         ));
         assert!(
@@ -412,17 +501,22 @@ mod tests {
         let other: Vec<Box<dyn age::Identity + Send + Sync>> =
             vec![Box::new(age::x25519::Identity::generate())];
         assert_eq!(
-            decrypt_file(&out, &Unlock::Identities(&other), &mut watch),
+            decrypt_file(&out, &Unlock::Identities(&other), &Here, &mut watch),
             End::Failed(Failure::NoMatchingKey)
         );
         let pass = SecretString::from("nope".to_owned());
         assert!(matches!(
-            decrypt_file(&out, &Unlock::Passphrase(&pass), &mut watch),
+            decrypt_file(&out, &Unlock::Passphrase(&pass), &Here, &mut watch),
             End::Failed(_)
         ));
         let mine: Vec<Box<dyn age::Identity + Send + Sync>> = vec![Box::new(identity)];
         std::fs::remove_file(&source).unwrap();
-        let back = made(decrypt_file(&out, &Unlock::Identities(&mine), &mut watch));
+        let back = made(decrypt_file(
+            &out,
+            &Unlock::Identities(&mine),
+            &Here,
+            &mut watch,
+        ));
         assert_eq!(back, source);
         assert_eq!(std::fs::read(&back).unwrap(), b"hello there");
         assert_eq!(pass.expose_secret(), "nope");
@@ -443,11 +537,12 @@ mod tests {
             &source,
             &Lock::Passphrase(&pass),
             false,
+            &Here,
             &mut watch,
         ));
         let wrong = SecretString::from("thrown-away-wrong".to_owned());
         assert_eq!(
-            decrypt_file(&out, &Unlock::Passphrase(&wrong), &mut watch),
+            decrypt_file(&out, &Unlock::Passphrase(&wrong), &Here, &mut watch),
             End::Failed(Failure::WrongPassphrase)
         );
         // A header asking for work factor 21 is refused before any work.
@@ -459,7 +554,7 @@ mod tests {
         std::fs::write(&hostile, &bytes).unwrap();
         let start = std::time::Instant::now();
         assert_eq!(
-            decrypt_file(&hostile, &Unlock::Passphrase(&pass), &mut watch),
+            decrypt_file(&hostile, &Unlock::Passphrase(&pass), &Here, &mut watch),
             End::Failed(Failure::TooMuchWork)
         );
         assert!(start.elapsed() < std::time::Duration::from_secs(1));
@@ -471,13 +566,13 @@ mod tests {
         let damaged = dir.path().join("damaged.age");
         std::fs::write(&damaged, &bytes).unwrap();
         assert_eq!(
-            decrypt_file(&damaged, &Unlock::Passphrase(&pass), &mut watch),
+            decrypt_file(&damaged, &Unlock::Passphrase(&pass), &Here, &mut watch),
             End::Failed(Failure::Words(lines::DAMAGED.to_owned()))
         );
         assert!(!dir.path().join("damaged").exists());
         // Not age at all.
         assert_eq!(
-            decrypt_file(&source, &Unlock::Passphrase(&pass), &mut watch),
+            decrypt_file(&source, &Unlock::Passphrase(&pass), &Here, &mut watch),
             End::Failed(Failure::NotAge)
         );
     }
@@ -501,7 +596,13 @@ mod tests {
             progress: &mut progress,
         };
         assert_eq!(
-            encrypt_file(&source, &Lock::Recipients(&recipients), false, &mut watch),
+            encrypt_file(
+                &source,
+                &Lock::Recipients(&recipients),
+                false,
+                &Here,
+                &mut watch
+            ),
             End::Cancelled
         );
         let names: Vec<String> = std::fs::read_dir(dir.path())

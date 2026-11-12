@@ -86,9 +86,15 @@ pub const NOT_PROOF: &str = "This does not prove who made it.";
 /// The masked prompt's words for a key: "Passphrase for key ending 4E7B"
 /// (30); with " (hidden):" the line is 40 cells.
 pub fn key_passphrase(key: Option<&str>) -> String {
+    format!("Passphrase for {}", key_subject(key))
+}
+
+/// The subject of a key's passphrase question, for the file-passphrase
+/// prompt: "key ending 4E7B", or "your signing key" when gpg named none.
+pub fn key_subject(key: Option<&str>) -> String {
     match key {
-        Some(key) => format!("Passphrase for key ending {key}"),
-        None => "Passphrase for your signing key".to_owned(),
+        Some(key) => format!("key ending {key}"),
+        None => "your signing key".to_owned(),
     }
 }
 

@@ -34,6 +34,20 @@ fn a_passphrase_asked_twice_encrypts_each_file_beside_it() {
         names_in(dir.path()),
         ["a.txt", "a.txt.age", "b.txt", "b.txt.age"]
     );
+    // Each output went through diroxide's stage and commit, so it joins
+    // the command's Undo; no stage is left open.
+    assert_eq!(
+        host.seen.committed,
+        [dir.path().join("a.txt.age"), dir.path().join("b.txt.age")]
+    );
+    assert!(host.seen.open_stages.is_empty());
+    assert!(
+        host.seen
+            .wire
+            .iter()
+            .any(|line| line.contains("\"fs/stage\"")),
+        "the plugin asked for a stage"
+    );
     // The form: two hidden fields and the armor box, the plan first.
     let form = &host.seen.forms[0];
     assert_eq!(form["title"], lines::PASSPHRASE_TITLE);

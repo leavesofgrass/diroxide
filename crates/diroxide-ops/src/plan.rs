@@ -104,6 +104,17 @@ pub enum Step {
         /// What changes.
         change: AttributeChange,
     },
+    /// Set one extended attribute or stream of an entry to these bytes,
+    /// or remove it when `value` is `None` (the internet mark's removal
+    /// and its undo). What it held before goes into the undo record.
+    SetExtended {
+        /// The entry.
+        place: Place,
+        /// The item's name as the system gives it.
+        name: String,
+        /// Its new bytes, or `None` to remove it.
+        value: Option<Vec<u8>>,
+    },
     /// Write one part of a split: `length` bytes of `from`, starting at
     /// `offset`, as the new file `to` ([`crate::split`]).
     SplitPart {
@@ -169,7 +180,8 @@ impl Step {
             | Step::Restore { place }
             | Step::Remove { place }
             | Step::RemoveEmptyFolder { place }
-            | Step::SetAttributes { place, .. } => place,
+            | Step::SetAttributes { place, .. }
+            | Step::SetExtended { place, .. } => place,
             Step::SplitPart { from, .. } | Step::JoinPart { from, .. } => from,
             Step::WriteChecksum { of, .. } => of,
             Step::RestoreItem { item } | Step::Purge { item } => &item.original,
@@ -189,7 +201,7 @@ impl Step {
             | Step::Link { place, .. }
             | Step::Relink { place, .. }
             | Step::Restore { place } => Some(place),
-            Step::SetAttributes { place, .. } => Some(place),
+            Step::SetAttributes { place, .. } | Step::SetExtended { place, .. } => Some(place),
             Step::SplitPart { to, .. } | Step::JoinPart { to, .. } => Some(to),
             Step::WriteChecksum { place, .. } => Some(place),
             Step::RestoreItem { item } => Some(&item.original),
@@ -244,6 +256,16 @@ impl Step {
             Step::SetAttributes { place, .. } => {
                 format!("change the attributes of {}", spell(place))
             }
+            Step::SetExtended {
+                place,
+                name,
+                value: Some(_),
+            } => format!("write {} on {}", spell_out(name), spell(place)),
+            Step::SetExtended {
+                place,
+                name,
+                value: None,
+            } => format!("remove {} from {}", spell_out(name), spell(place)),
             Step::SplitPart { to, length, .. } => format!(
                 "write the part {}, {}",
                 spell(to),
@@ -624,6 +646,21 @@ impl Plan {
             facts: PlanFacts::default(),
             expected: HashMap::new(),
         }
+    }
+
+    /// A plan that sets or removes extended items, one step each, as
+    /// `(place, name, new bytes or None to remove)`: the internet mark's
+    /// removal through the engine, so its undo record is the engine's.
+    pub fn extended(
+        job: JobId,
+        kind: JobKind,
+        changes: impl IntoIterator<Item = (Place, String, Option<Vec<u8>>)>,
+    ) -> Self {
+        let steps = changes
+            .into_iter()
+            .map(|(place, name, value)| Step::SetExtended { place, name, value })
+            .collect();
+        Self::new(job, kind, steps, ConflictPolicy::Skip)
     }
 
     /// How many entries the plan touches: the counted entries, or the

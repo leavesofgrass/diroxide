@@ -52,6 +52,8 @@ pub mod plan;
 mod planner;
 pub mod progress;
 pub mod queue;
+// The batch rename engine, the library half (alpha 5, lane BR).
+pub mod rename_rules;
 pub mod resume;
 #[cfg(test)]
 mod resume_tests;
@@ -60,6 +62,7 @@ mod run;
 mod run_tests;
 pub mod sidecar;
 pub mod split;
+pub mod sync;
 #[cfg(test)]
 mod testing;
 // The arrival tracker (W3t, plan commit 33).
@@ -97,4 +100,7 @@ pub use queue::{Cancelled, Grant, HostKey, JobClass, Queue, QueueLimits};
 pub use resume::{JobNotice, Ledger, NotResumed, Partial};
 pub use sidecar::{Sidecar, SidecarRead};
 pub use split::{SplitFacts, SplitFile};
-pub use undo::{LeftAs, Relinked, UndoLog, UndoRecord};
+pub use sync::{
+    CompareCriteria, Comparison, SyncEnv, SyncMode, SyncPlan, compare_dirs, plan_sync, run_sync,
+};
+pub use undo::{ExtendedBefore, LeftAs, Relinked, UndoLog, UndoRecord};

@@ -242,7 +242,8 @@ impl TextScan {
                 "Lines",
                 grouped(self.lines()),
                 DetailGroup::Content,
-            ),
+            )
+            .sorted_by_count(self.lines()),
             Field::new(
                 "text.line_endings",
                 "Line endings",

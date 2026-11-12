@@ -315,11 +315,11 @@ fn a_rar_opens_through_7_zip_says_its_note_and_is_never_written() {
     s.focus("notes.txt");
     assert_eq!(
         s.key("delete"),
-        ["RAR is read only: diroxide never writes it"]
+        ["RAR is read only in diroxide"]
     );
     // Z's sentence is 42 cells; its meaning is in the first 16.
     assert!(diroxide_core::format::within_cells(
-        "RAR is read only: diroxide never writes it",
+        "RAR is read only in diroxide",
         "RAR is read only"
     ));
 }

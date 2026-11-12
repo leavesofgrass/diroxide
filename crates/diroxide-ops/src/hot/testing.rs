@@ -68,6 +68,8 @@ pub(crate) struct FakeTools {
     pub has: Mutex<bool>,
     pub acts: Mutex<HashMap<String, Act>>,
     pub runs: Mutex<Vec<String>>,
+    /// The version `pdftotext` reports through the runner, when set.
+    pub version: Mutex<Option<String>>,
 }
 
 impl FakeTools {
@@ -76,6 +78,7 @@ impl FakeTools {
             has: Mutex::new(true),
             acts: Mutex::new(HashMap::new()),
             runs: Mutex::new(Vec::new()),
+            version: Mutex::new(None),
         }
     }
 
@@ -180,6 +183,14 @@ impl FakeTools {
 impl ToolRunner for FakeTools {
     fn has(&self, tool: &str) -> bool {
         tool == "pdftotext" && *self.has.lock().unwrap()
+    }
+
+    fn version(&self, tool: &str) -> Option<String> {
+        if tool == "pdftotext" {
+            self.version.lock().unwrap().clone()
+        } else {
+            None
+        }
     }
 
     fn run(&self, request: &ToolRequest, cancel: &CancelToken) -> Result<ToolOutput, ToolRunError> {

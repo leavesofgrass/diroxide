@@ -491,7 +491,8 @@ mod tests {
             ),
             (
                 "ctrl+t",
-                &["Ctrl+T is kept for New tab, coming in a later alpha. Use it anyway? y or n"],
+                // Bound since the tabs came (alpha 5, lane TB).
+                &["Ctrl+T already runs New tab. Take it, swap, or cancel?"],
             ),
             (
                 "ctrl+f",

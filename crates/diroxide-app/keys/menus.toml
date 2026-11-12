@@ -438,6 +438,90 @@ access = "g"
 command = "view.watch-folder"
 access = "a"
 
+# Tabs (alpha 5, lane TB): the tab list, and every tab command in the
+# Tabs submenu, the terminal's way to them.
+[[menu.item]]
+command = "tab.list"
+access = "j"
+
+[[menu.item]]
+menu = "tabs"
+access = "n"
+
+[[menu]]
+id = "tabs"
+title = "Tabs"
+access = "n"
+bar = false
+
+[[menu.item]]
+command = "tab.new"
+access = "n"
+
+[[menu.item]]
+command = "tab.new-for-focused"
+access = "f"
+
+[[menu.item]]
+command = "tab.close"
+access = "c"
+
+[[menu.item]]
+command = "tab.close-others"
+access = "h"
+
+[[menu.item]]
+command = "tab.undo-close"
+access = "u"
+
+[[menu.item]]
+command = "tab.next"
+access = "x"
+
+[[menu.item]]
+command = "tab.previous"
+access = "p"
+
+[[menu.item]]
+command = "tab.list"
+access = "l"
+
+[[menu.item]]
+command = "tab.move-left"
+access = "e"
+
+[[menu.item]]
+command = "tab.move-right"
+access = "r"
+
+[[menu.item]]
+command = "tab.to-other-panel"
+access = "o"
+
+[[menu.item]]
+command = "tab.copy-to-other-panel"
+access = "y"
+
+[[menu.item]]
+command = "tab.lock"
+access = "k"
+
+[[menu.item]]
+command = "tab.pin"
+access = "i"
+
+[[menu.item]]
+command = "tab.base"
+access = "b"
+
+[[menu.item]]
+command = "tab.save-set"
+access = "s"
+
+[[menu.item]]
+command = "tab.load-set"
+access = "a"
+
 [[menu]]
 id = "preview"
 title = "Preview"

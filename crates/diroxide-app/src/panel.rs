@@ -447,6 +447,9 @@ pub struct Panel {
     /// The file types the filter's `group:` asks, the owner's groups
     /// among them (lane TA).
     types: Option<std::sync::Arc<TypeRegistry>>,
+    /// Which tab this lister is, unique across the run (alpha 5, lane
+    /// TB): a job's ending acts on the tab it began in only.
+    tab: u64,
 }
 
 /// One bit for each entry of a listing.
@@ -478,6 +481,14 @@ impl Bits {
     fn bytes(&self) -> usize {
         self.words.len() * 8
     }
+}
+
+/// The next count of replaced entries, unique across every panel of the
+/// run, so the answers of one tab's checks never fit another tab's
+/// entries (alpha 5, lane TB).
+fn next_generation() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// The words a row says for a file whose name says nothing until its
@@ -518,7 +529,20 @@ impl Panel {
             check_skip: CheckSkip::new(&settings.check.skip),
             disagreements: HashMap::new(),
             types: None,
+            tab: next_generation(),
         }
+    }
+
+    /// Which tab this lister is, unique across the run (alpha 5, lane
+    /// TB).
+    pub fn tab_id(&self) -> u64 {
+        self.tab
+    }
+
+    /// Makes this lister a tab of its own: a copy kept as another tab
+    /// takes a new id, so what the first tab began never lands in it.
+    pub fn renew_tab_id(&mut self) {
+        self.tab = next_generation();
     }
 
     /// Which side it is on.
@@ -1059,7 +1083,7 @@ impl Panel {
         self.all_entries = entries;
         self.checked = checked;
         self.typed_place = Some(self.place.clone());
-        self.entries_generation += 1;
+        self.entries_generation = next_generation();
         self.refresh(clock)
     }
 
@@ -1100,7 +1124,9 @@ impl Panel {
     }
 
     /// Counts each time the entries were replaced; an answer of the type
-    /// check carries the count it was asked under.
+    /// check carries the count it was asked under. The count is unique
+    /// across every panel of the run (alpha 5, lane TB): a tab switched in
+    /// never takes the answers asked for another tab of its side.
     pub fn entries_generation(&self) -> u64 {
         self.entries_generation
     }

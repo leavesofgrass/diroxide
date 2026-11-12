@@ -23,9 +23,11 @@
 //! Dirsize walks with filters off. Duplicates go by size, then a fast
 //! hash, then a full comparison (alpha.8).
 
+pub mod collections;
 mod content;
 mod dirsize;
 mod engine;
+pub mod flat;
 mod hit;
 mod local_entry;
 mod newest;
@@ -41,8 +43,16 @@ use diroxide_core::{Explain, ListModel, Place, SystemClock};
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use thiserror::Error;
 
+pub use collections::{
+    Added, CollectionError, Collections, Listed, PathItem, PathLimits, PathList, PathListError,
+    PathSeparator, PlacesRead, Staleness, item_freshness, read_path_list,
+};
 pub use dirsize::{dirsize_with, size_every_folder};
 pub use engine::run_search;
+pub use flat::{
+    FlatOptions, FlatSummary, flat_key, flat_list, flat_off_words, flat_progress_line, flat_query,
+    flat_row, flat_view,
+};
 pub use hit::{ContentMatch, SearchHit};
 pub use newest::{Day, Newest, newest_files};
 pub use query::{

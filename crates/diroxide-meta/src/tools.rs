@@ -232,7 +232,8 @@ pub fn read_pdfinfo(stdout: &[u8]) -> Vec<Field> {
                 None => continue,
             },
             "Pages" => match value.parse::<u64>() {
-                Ok(n) => Field::new("doc.pages", "Pages", grouped(n), DetailGroup::Content),
+                Ok(n) => Field::new("doc.pages", "Pages", grouped(n), DetailGroup::Content)
+                    .sorted_by_count(n),
                 Err(_) => continue,
             },
             "Encrypted" => Field::new(

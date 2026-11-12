@@ -271,6 +271,13 @@ Portable names. Refuses names that other systems cannot store, such as a colon o
 - Holds: true or false.
 - Default: `true`.
 
+### recent_files
+
+Remember recent files. Keeps a list of the files opened or edited from diroxide, on this computer only. Off: nothing is kept, and the list is emptied.
+
+- Holds: true or false.
+- Default: `true`.
+
 ## Jobs and transfers
 
 ### jobs.per_host

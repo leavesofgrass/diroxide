@@ -27,6 +27,7 @@ pub mod error;
 pub mod files;
 pub mod paths;
 pub mod presets;
+pub mod recent;
 pub mod recipes;
 pub mod schema;
 pub mod session;
@@ -47,8 +48,11 @@ pub use paths::Paths;
 pub use presets::{
     BUILTIN_SPLIT_PRESETS, BuiltinPreset, SplitPreset, builtin_split_presets, merge_split_presets,
 };
+pub use recent::{RecentAction, RecentFiles, RecentItem, clear_recent, record_recent};
 pub use schema::{Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind};
-pub use session::{Layout, PanelState, SessionState, load_session, save_session};
+pub use session::{
+    Layout, PanelState, SessionState, TabLock, TabState, load_session, save_session,
+};
 pub use settings::{
     ArchiveSettings, AutoPreview, CompareAlgorithm, CompareSettings, CompletionList,
     ConfirmSettings, DRIVE_KINDS, FilterCase, Frontend, Graphics, HexRow, Highlighting,

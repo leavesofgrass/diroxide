@@ -19,7 +19,7 @@ use crate::exif::{self, ExifFacts};
 use crate::field::Field;
 use crate::image::{ImageParts, read_parts};
 use crate::reader::{Cost, MetaError, ReadLimits, ReadRequest, Reader};
-use crate::words::{coordinate_words, iso_date_words};
+use crate::words::{coordinate_words, iso_date_words, iso_second_words};
 
 /// The photo facts reader.
 #[derive(Clone, Copy, Debug, Default)]
@@ -37,6 +37,7 @@ impl Reader for PhotoFacts {
     fn keys(&self) -> &'static [&'static str] {
         &[
             "image.taken",
+            "image.taken_second",
             "image.camera",
             "image.lens",
             "image.software",
@@ -104,6 +105,15 @@ pub(crate) fn photo_fields(parts: &ImageParts) -> Vec<Field> {
         "image.taken",
         "Taken",
         facts.taken.as_deref().and_then(iso_date_words),
+        DetailGroup::Dates,
+        false,
+    );
+    // The same moment to the second, beside the minute form, for what
+    // needs it (bursts a second apart; lane AP's request 2).
+    add(
+        "image.taken_second",
+        "Taken to the second",
+        facts.taken.as_deref().and_then(iso_second_words),
         DetailGroup::Dates,
         false,
     );
@@ -267,6 +277,7 @@ mod tests {
             lines,
             [
                 "Taken: 2001-01-01 08:30",
+                "Taken to the second: 2001-01-01 08:30:00",
                 "Camera: SpikeCam Spike 1",
                 "Location: 45.50 north, 122.69 west (private)",
                 "Camera serial: SN12345 (private)",
