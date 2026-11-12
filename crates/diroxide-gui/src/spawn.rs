@@ -15,13 +15,20 @@
 //! causes are plain lowercase words, which the app says as they are
 //! ([`plain_cause`]).
 //!
-//! - **Windows:** every program gets a console of its own
+//! - **Windows:** the shell, a command line, a console program and a
+//!   `.cmd` or `.bat` file get a console of their own
 //!   (`CREATE_NEW_CONSOLE`, started by the platform module, which passes
 //!   the window's handles on to none), which is the system's terminal
-//!   (Windows Terminal where it is the default); a program with its own
-//!   window, an editor such as Notepad, simply opens. A command line
-//!   keeps its window after the command (cmd's `/K`, PowerShell's
-//!   `-NoExit`).
+//!   (Windows Terminal where it is the default). A command line keeps
+//!   its window after the command (cmd's `/K`, PowerShell's `-NoExit`).
+//!   A program with windows of its own, an editor such as Notepad, told
+//!   apart by the subsystem its header names ([`pe_subsystem`]), starts
+//!   through the shell (`ShellExecuteExW`), as File Explorer starts it
+//!   (lane AF, from the owner's Notepad report of November 6, 2026: the
+//!   Store Notepad's hand-off between its instances misbehaved on direct
+//!   starts in a console, and opened cleanly through the shell). The
+//!   shell passes no environment of its own, so such a program gets
+//!   diroxide's environment without the `DIRO_` variables.
 //! - **Linux and the BSDs:** the shell and a command line run in a
 //!   terminal emulator: `$TERMINAL`, else the first of
 //!   `x-terminal-emulator`, `gnome-terminal`, `konsole`,
@@ -84,8 +91,119 @@ pub struct Planned {
     pub env: Vec<(String, OsString)>,
     /// Whether it gets a console window of its own (Windows).
     pub new_console: bool,
+    /// Whether it starts through the shell, as File Explorer starts a
+    /// program with windows of its own (Windows; [`through_shell`]).
+    pub through_shell: bool,
     /// What it is, for what is said.
     pub started: Started,
+}
+
+/// The subsystem a Windows program's header names
+/// (`IMAGE_SUBSYSTEM_WINDOWS_GUI` for a program with windows of its own).
+pub const WINDOW_SUBSYSTEM: u16 = 2;
+
+/// The subsystem named in the header of a Windows program, from the
+/// file's first bytes: 2 for a program with windows of its own, 3 for a
+/// console program; `None` when the bytes are not a program's header or
+/// stop short of the field.
+pub fn pe_subsystem(head: &[u8]) -> Option<u16> {
+    let word = |at: usize| -> Option<u16> {
+        let bytes = head.get(at..at.checked_add(2)?)?;
+        Some(u16::from_le_bytes([bytes[0], bytes[1]]))
+    };
+    if head.get(0..2)? != b"MZ" {
+        return None;
+    }
+    let pointer = head.get(0x3c..0x40)?;
+    let header = u32::from_le_bytes([pointer[0], pointer[1], pointer[2], pointer[3]]) as usize;
+    if head.get(header..header.checked_add(4)?)? != b"PE\0\0" {
+        return None;
+    }
+    // The optional header follows the four signature bytes and the
+    // 20-byte file header; its magic says PE32 or PE32+, and the
+    // subsystem is 68 bytes in for both.
+    let optional = header.checked_add(24)?;
+    if !matches!(word(optional)?, 0x10b | 0x20b) {
+        return None;
+    }
+    word(optional.checked_add(68)?)
+}
+
+/// How far into a file [`read_subsystem`] reads at most: a header placed
+/// further in is not a program the window starts through the shell.
+const HEADER_LIMIT: u64 = 64 * 1024;
+
+/// The subsystem of the program at `path`, read from its header;
+/// `None` when it cannot be read or is not a program's header.
+pub fn read_subsystem(path: &Path) -> Option<u16> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).ok()?;
+    let mut head = Vec::new();
+    file.take(HEADER_LIMIT).read_to_end(&mut head).ok()?;
+    pe_subsystem(&head)
+}
+
+/// The file a program name starts on Windows: a name with a folder in it
+/// as it is; else the first folder of `path_var` holding the name, or the
+/// name with one of `path_ext`'s endings when it has no ending of its
+/// own, as `is_file` says.
+pub fn resolve_program(
+    program: &std::ffi::OsStr,
+    path_var: Option<&std::ffi::OsStr>,
+    path_ext: Option<&str>,
+    is_file: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    let name = Path::new(program);
+    if name.components().count() > 1 || name.is_absolute() {
+        return is_file(name).then(|| name.to_path_buf());
+    }
+    let endings: Vec<String> = if name.extension().is_some() {
+        vec![String::new()]
+    } else {
+        path_ext
+            .unwrap_or(".COM;.EXE;.BAT;.CMD")
+            .split(';')
+            .filter(|e| !e.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+    let folders = std::env::split_paths(path_var?).collect::<Vec<_>>();
+    folders.iter().find_map(|folder| {
+        endings.iter().find_map(|ending| {
+            let mut file = program.to_os_string();
+            file.push(ending);
+            let candidate = folder.join(file);
+            is_file(&candidate).then_some(candidate)
+        })
+    })
+}
+
+/// Whether a Windows program starts through the shell: a program on its
+/// own (not the shell or a command line), found as an `.exe` file whose
+/// header names windows of its own. A console program, a `.cmd` or
+/// `.bat` file, or a program not found keeps its console of its own, so
+/// a program not found is said as before.
+pub fn through_shell(started: Started, file: Option<&Path>, subsystem: Option<u16>) -> bool {
+    started == Started::Program
+        && file
+            .and_then(Path::extension)
+            .is_some_and(|ending| ending.eq_ignore_ascii_case("exe"))
+        && subsystem == Some(WINDOW_SUBSYSTEM)
+}
+
+/// A Windows plan for a program with windows of its own made to start
+/// through the shell, on its full path, with no console of its own; any
+/// other plan is left as it is.
+pub fn use_shell_for_window_program(
+    planned: &mut Planned,
+    file: Option<PathBuf>,
+    subsystem: Option<u16>,
+) {
+    if let Some(file) = file.filter(|f| through_shell(planned.started, Some(f), subsystem)) {
+        planned.program = file.into_os_string();
+        planned.new_console = false;
+        planned.through_shell = true;
+    }
 }
 
 /// What the runtime asked for, sorted: the shell alone is the shell; the
@@ -147,6 +265,7 @@ pub fn plan(
         folder: program.folder.clone(),
         env: program.env.clone(),
         new_console: false,
+        through_shell: false,
         started,
     };
     match system {
@@ -237,6 +356,16 @@ fn keep_open_on_windows(args: &mut Vec<OsString>) {
 /// Starts a planned program detached: no waiting, its handles not the
 /// window's, reaped on a thread of its own when it ends.
 pub fn start(planned: &Planned) -> Result<(), String> {
+    #[cfg(windows)]
+    if planned.through_shell {
+        // As File Explorer starts it: the shell hands the file to the
+        // program, a Store app's launcher included.
+        return crate::platform::win::start_through_shell(
+            &planned.program,
+            &planned.args,
+            &planned.folder,
+        );
+    }
     #[cfg(windows)]
     if planned.new_console {
         // The standard library always passes this process's handles, so
@@ -358,10 +487,19 @@ impl Launcher for WindowLauncher {
                 .or_else(|| unix_terminal(std::env::var_os("TERMINAL"), on_path)),
             _ => None,
         };
+        let mut planned = plan(program, &shell, System::current(), terminal)?;
+        if System::current() == System::Windows && planned.started == Started::Program {
+            let file = resolve_program(
+                &planned.program,
+                std::env::var_os("PATH").as_deref(),
+                std::env::var("PATHEXT").ok().as_deref(),
+                Path::is_file,
+            );
+            let subsystem = file.as_deref().and_then(read_subsystem);
+            use_shell_for_window_program(&mut planned, file, subsystem);
+        }
         // Nothing has ended: the app says what started, or why not.
-        plan(program, &shell, System::current(), terminal)
-            .and_then(|planned| (self.starter)(&planned))
-            .map(|()| None)
+        (self.starter)(&planned).map(|()| None)
     }
 
     fn waits(&self) -> bool {
@@ -430,6 +568,109 @@ mod tests {
         assert_eq!(p.program, OsString::from("notepad.exe"));
         assert_eq!(p.args, [OsString::from("notes.txt")]);
         assert_eq!(p.env.len(), 1);
+    }
+
+    /// A made program header: the DOS stub's pointer at 0x3c to the
+    /// signature at `at`, the file header, and the optional header's
+    /// magic and subsystem.
+    fn header(at: usize, magic: u16, subsystem: u16) -> Vec<u8> {
+        let mut bytes = vec![0u8; at + 24 + 70];
+        bytes[0..2].copy_from_slice(b"MZ");
+        bytes[0x3c..0x40].copy_from_slice(&(at as u32).to_le_bytes());
+        bytes[at..at + 4].copy_from_slice(b"PE\0\0");
+        bytes[at + 24..at + 26].copy_from_slice(&magic.to_le_bytes());
+        bytes[at + 24 + 68..at + 24 + 70].copy_from_slice(&subsystem.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn a_programs_header_says_whether_it_has_windows_of_its_own() {
+        assert_eq!(
+            pe_subsystem(&header(0x80, 0x20b, 2)),
+            Some(WINDOW_SUBSYSTEM)
+        );
+        assert_eq!(pe_subsystem(&header(0xf8, 0x10b, 3)), Some(3));
+        // Not a program, a short file, a pointer past the end, an
+        // unknown magic: no subsystem, so the console start stays.
+        assert_eq!(pe_subsystem(b"@echo off\r\n"), None);
+        assert_eq!(pe_subsystem(b"MZ"), None);
+        let mut past = header(0x80, 0x20b, 2);
+        past[0x3c..0x40].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(pe_subsystem(&past), None);
+        assert_eq!(pe_subsystem(&header(0x80, 0x107, 2)), None);
+        let short = header(0x80, 0x20b, 2);
+        assert_eq!(pe_subsystem(&short[..0x80 + 24 + 69]), None);
+    }
+
+    #[test]
+    fn a_program_name_is_found_on_the_path_with_its_endings() {
+        let folders = std::env::join_paths([PathBuf::from("one"), PathBuf::from("two")]).unwrap();
+        let there = |files: &'static [&'static str]| {
+            move |p: &Path| files.iter().any(|f| p == Path::new(f))
+        };
+        let two = |name: &str| PathBuf::from("two").join(name);
+        let found = resolve_program(
+            std::ffi::OsStr::new("notepad.exe"),
+            Some(&folders),
+            None,
+            there(&["two/notepad.exe", "two\\notepad.exe"]),
+        );
+        assert_eq!(found, Some(two("notepad.exe")));
+        // No ending: PATHEXT's, in order; a .cmd is found as a .cmd.
+        let found = resolve_program(
+            std::ffi::OsStr::new("tw"),
+            Some(&folders),
+            Some(".EXE;.CMD"),
+            there(&["two/tw.CMD", "two\\tw.CMD"]),
+        );
+        assert_eq!(found, Some(two("tw.CMD")));
+        assert_eq!(
+            resolve_program(std::ffi::OsStr::new("gone"), Some(&folders), None, |_| {
+                false
+            }),
+            None
+        );
+        assert_eq!(
+            resolve_program(std::ffi::OsStr::new("x.exe"), None, None, |_| true),
+            None
+        );
+    }
+
+    #[test]
+    fn only_a_program_with_windows_of_its_own_starts_through_the_shell() {
+        let shell = OsString::from("cmd.exe");
+        let editor = plan(
+            &program("notepad.exe", &["notes.txt"]),
+            &shell,
+            System::Windows,
+            None,
+        )
+        .unwrap();
+        let full = PathBuf::from("C:/Windows/System32/notepad.exe");
+        let mut p = editor.clone();
+        use_shell_for_window_program(&mut p, Some(full.clone()), Some(WINDOW_SUBSYSTEM));
+        assert!(p.through_shell && !p.new_console);
+        assert_eq!(p.program, full.clone().into_os_string());
+        assert_eq!(p.args, [OsString::from("notes.txt")]);
+        // A console program, a .cmd, a program not found: a console of
+        // its own, as before.
+        for (file, subsystem) in [
+            (Some(PathBuf::from("C:/tools/vim.exe")), Some(3)),
+            (
+                Some(PathBuf::from("C:/tools/edit.cmd")),
+                Some(WINDOW_SUBSYSTEM),
+            ),
+            (None, None),
+        ] {
+            let mut p = editor.clone();
+            use_shell_for_window_program(&mut p, file, subsystem);
+            assert!(p.new_console && !p.through_shell, "{p:?}");
+            assert_eq!(p.program, OsString::from("notepad.exe"));
+        }
+        // The shell itself never goes through it.
+        let mut p = plan(&program("cmd.exe", &[]), &shell, System::Windows, None).unwrap();
+        use_shell_for_window_program(&mut p, Some(full), Some(WINDOW_SUBSYSTEM));
+        assert!(p.new_console && !p.through_shell);
     }
 
     #[test]
