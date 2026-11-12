@@ -1800,6 +1800,7 @@ dependencies = [
 name = "diroxide-ops"
 version = "0.1.0-alpha.4"
 dependencies = [
+ "blake3",
  "carta",
  "crc32fast",
  "diroxide-core",
