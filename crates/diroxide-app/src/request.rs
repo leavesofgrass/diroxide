@@ -596,6 +596,9 @@ pub enum Request {
     /// Write the folder views to `folder-views.toml` in the state folder
     /// (W3l).
     SaveViews(Box<crate::views::FolderViews>),
+    /// Write the saved tab sets to `tab-sets.toml` in the state folder
+    /// (alpha 5, lane TB).
+    SaveTabSets(Box<crate::tabs::TabSets>),
     /// Find which of these places are gone, on a worker, for the Labels
     /// list's missing counts (W3l); answered as
     /// [`AppEvent::PlacesChecked`](crate::AppEvent::PlacesChecked).

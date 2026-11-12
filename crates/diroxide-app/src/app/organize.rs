@@ -153,6 +153,9 @@ pub(super) enum Wants {
     /// The review, its move field and the month folders' question (alpha
     /// 4, lane AP).
     Photos(super::photos_ui::PhotoWants),
+    /// The tab list, Save tab set's name and the saved sets (alpha 5,
+    /// lane TB).
+    Tabs(super::tabbing::TabWants),
 }
 
 impl Wants {
@@ -173,6 +176,7 @@ impl Wants {
         use super::crypt_ui::CryptWants;
         use super::metadata_ui::MetaWants;
         use super::photos_ui::PhotoWants;
+        use super::tabbing::TabWants;
         use super::type_actions::TypeWants;
         use super::watched::WatchedWants;
         match self {
@@ -230,6 +234,12 @@ impl Wants {
                 PhotoWants::Review(_) => "Review",
                 PhotoWants::ReviewMove(_) => "ReviewMove",
                 PhotoWants::Months(_) => "MonthFolders",
+            },
+            Wants::Tabs(wants) => match wants {
+                TabWants::List { .. } => "TabList",
+                TabWants::CloseLocked { .. } => "TabCloseLocked",
+                TabWants::SaveName => "TabSetName",
+                TabWants::Sets => "TabSets",
             },
         }
     }
@@ -463,6 +473,7 @@ impl App {
             Wants::Crypt(wants) => self.crypt_accept(wants, &text),
             Wants::Access(wants) => self.access_accept(wants, row, &text),
             Wants::Photos(wants) => self.photo_accept(wants, row, &text),
+            Wants::Tabs(wants) => self.tabs_accept(wants, row, &text),
         }
     }
 
@@ -476,6 +487,7 @@ impl App {
             Wants::Meta(wants) => self.meta_yes(wants),
             Wants::Crypt(wants) => self.crypt_yes(wants),
             Wants::Photos(wants) => self.photo_yes(wants),
+            Wants::Tabs(wants) => self.tabs_yes(wants),
             _ => Vec::new(),
         }
     }
@@ -498,6 +510,7 @@ impl App {
             Wants::BookmarkText { side, place, .. } => self.bookmark_form(side, place, None),
             Wants::Convert(wants) => self.convert_escape(wants),
             Wants::Watched(wants) => self.watched_escape(wants),
+            Wants::Tabs(wants) => self.tabs_escape(wants),
             _ => Vec::new(),
         }
     }

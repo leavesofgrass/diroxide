@@ -64,6 +64,11 @@ impl App {
         how: Load,
     ) -> Vec<Effect> {
         let mut effects = Vec::new();
+        // A locked tab keeps its place: the change goes on in a new tab
+        // (alpha 5, lane TB).
+        if self.locked_tab_moves(side, &place, how) {
+            effects.extend(self.leave_locked_tab(side));
+        }
         // A new place closes a plugin list over the panel, saying so; the
         // same place listed again keeps it (lane L).
         if matches!(how, Load::Open | Load::Back | Load::Forward) {
@@ -122,6 +127,8 @@ impl App {
         let Some(session) = self.session.take() else {
             return;
         };
+        // Every panel's other tabs (alpha 5, lane TB).
+        self.restore_tabs(&session);
         for side in Side::BOTH {
             let saved = session.panel(side).clone();
             let panel_place = self.panel(side).place().clone();
@@ -275,11 +282,16 @@ impl App {
                 // The leaf and the count first, the folder it is in after:
                 // "Backup, 12 items, in D:\work".
                 let panel = self.panel(side);
-                let mut text = format!(
-                    "{}, {}",
-                    place_leaf(panel.place()),
+                let mut text = place_leaf(panel.place());
+                // The tab after the folder (alpha 5, lane TB): "Backup,
+                // tab 2 of 3, 12 items, in D:\work".
+                if let Some(tab) = self.tab_title_words(side) {
+                    text.push_str(&format!(", {tab}"));
+                }
+                text.push_str(&format!(
+                    ", {}",
                     count(panel.list().len() as u64, "item", "items")
-                );
+                ));
                 if let Some(parent) = panel.place().parent() {
                     text.push_str(&format!(
                         ", in {}",

@@ -50,7 +50,9 @@ pub use presets::{
 };
 pub use recent::{RecentAction, RecentFiles, RecentItem, clear_recent, record_recent};
 pub use schema::{Choice, SCHEMA, SettingGroup, SettingInfo, SettingKind};
-pub use session::{Layout, PanelState, SessionState, load_session, save_session};
+pub use session::{
+    Layout, PanelState, SessionState, TabLock, TabState, load_session, save_session,
+};
 pub use settings::{
     ArchiveSettings, AutoPreview, CompareAlgorithm, CompareSettings, CompletionList,
     ConfirmSettings, DRIVE_KINDS, FilterCase, Frontend, Graphics, HexRow, Highlighting,

@@ -61,6 +61,9 @@ pub struct Startup {
     pub bookmarks: crate::bookmarks::Bookmarks,
     /// The folders' own views (`folder-views.toml`).
     pub views: crate::views::FolderViews,
+    /// The saved tab sets (`tab-sets.toml` in the state folder; alpha 5,
+    /// lane TB).
+    pub tab_sets: crate::tabs::TabSets,
     /// The owner's theme files that loaded from the config's themes
     /// folder, in file-name order (lane A6): the app finds them by name
     /// beside the built-in themes. A file that did not load is already
@@ -99,6 +102,7 @@ impl Default for Startup {
             labels: crate::labels::LabelStore::starter(),
             bookmarks: crate::bookmarks::Bookmarks::new(),
             views: crate::views::FolderViews::new(),
+            tab_sets: crate::tabs::TabSets::new(),
             user_themes: Vec::new(),
             themes_dir: None,
             type_slots: crate::typing::TypeSlots::default(),
@@ -258,6 +262,8 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
     problems.extend(bookmarks.problems);
     let views = crate::views::load(paths);
     problems.extend(views.problems);
+    let tab_sets = crate::tabs::load(paths);
+    problems.extend(tab_sets.problems);
     let themes_dir = paths.themes_dir();
     let user_themes = user_themes(&themes_dir);
     // The file types' problems join the startup line (lane TA): a type,
@@ -284,6 +290,7 @@ pub fn load(paths: &Paths, config: &Config, platform: Platform) -> Startup {
         labels: labels.value,
         bookmarks: bookmarks.value,
         views: views.value,
+        tab_sets: tab_sets.value,
         user_themes,
         themes_dir: Some(themes_dir),
         type_slots,

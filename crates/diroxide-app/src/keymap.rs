@@ -1212,7 +1212,8 @@ mod tests {
         );
         assert_eq!(
             said("ctrl+t", ids::COPY),
-            ["Ctrl+T is kept for New tab, coming in a later alpha."]
+            // Bound since the tabs came (alpha 5, lane TB).
+            ["Ctrl+T already runs New tab."]
         );
         assert!(said("ctrl+t", CommandId::from_static("tab.new")).is_empty());
         assert_eq!(

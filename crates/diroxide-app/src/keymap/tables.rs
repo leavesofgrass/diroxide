@@ -628,8 +628,9 @@ mod tests {
         assert_eq!(table_problems(), &[] as &[String]);
         assert!(terminal_table().len() >= 30);
         assert!(screen_reader_table().len() >= 10);
-        // Five: F11 left the table when Full screen came (lane A6).
-        assert!(reserved_table().len() >= 5);
+        // One: F11 left the table when Full screen came (lane A6), and the
+        // four tab keys when the tabs came (alpha 5, lane TB).
+        assert!(!reserved_table().is_empty());
         assert!(reserved_entry(&key("f11"), KeyColumn::Gui).is_none());
     }
 
@@ -769,13 +770,16 @@ mod tests {
 
     #[test]
     fn the_later_alphas_keys_are_reserved() {
+        // The tab keys left the table when the tabs came (alpha 5, lane
+        // TB); the folder tree's key is still kept.
         for text in ["ctrl+t", "ctrl+w"] {
             assert!(
-                reserved_entry(&key(text), KeyColumn::Terminal).is_some(),
+                reserved_entry(&key(text), KeyColumn::Terminal).is_none(),
                 "{text}"
             );
         }
-        assert!(reserved_entry(&key("ctrl+tab"), KeyColumn::Gui).is_some());
-        assert!(reserved_entry(&key("ctrl+tab"), KeyColumn::Terminal).is_none());
+        assert!(reserved_entry(&key("ctrl+tab"), KeyColumn::Gui).is_none());
+        assert!(reserved_entry(&key("ctrl+shift+e"), KeyColumn::Gui).is_some());
+        assert!(reserved_entry(&key("ctrl+shift+e"), KeyColumn::Terminal).is_none());
     }
 }

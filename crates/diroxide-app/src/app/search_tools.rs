@@ -442,11 +442,17 @@ impl App {
         let mut total = 0u64;
         let mut failed = Vec::new();
         let mut first = None;
+        // Only the folder the panel shows takes the sizes: after a tab
+        // switch they are said and not put in another tab's rows (alpha 5,
+        // lane TB).
+        let shown = self.panel(side).place().clone();
         for (place, result) in &sizes {
             let name = place.name().unwrap_or_default().to_owned();
             match result {
                 Ok(size) => {
-                    counted.insert(name.clone(), size.bytes);
+                    if place.parent().as_ref() == Some(&shown) {
+                        counted.insert(name.clone(), size.bytes);
+                    }
                     total += size.bytes;
                     if first.is_none() {
                         first = Some((name, *size));
