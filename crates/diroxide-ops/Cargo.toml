@@ -10,7 +10,6 @@ publish.workspace = true
 [dependencies]
 # The duplicate finder's default hash (alpha 5, DU's request, approved in
 # P5's brief): the same pure-Rust BLAKE3 `diroxide-meta` checksums with.
-blake3.workspace = true
 # carta's writers for conversions (alpha 4, lane CL, with the
 # orchestrator's go): whole documents (`standalone`), and plain text, GFM
 # and CommonMark beside the root's AsciiDoc, Typst, LaTeX, MediaWiki, Org,

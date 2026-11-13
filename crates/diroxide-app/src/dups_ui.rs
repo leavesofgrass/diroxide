@@ -1,6 +1,6 @@
 //! Duplicates, their types in the app (alpha 5, lane DA): the scope, the
 //! scan, the groups and the keep rules, over the engine half in
-//! `diroxide_ops::dups` (its default hasher `Blake3Hasher`).
+//! `diroxide_ops::dups` (its hasher filled from the meta crate).
 //!
 //! Reserved by the pre-wiring step (lane P5): [`DupsAsk`] travels as
 //! [`Request::Duplicates`](crate::Request::Duplicates) to the runtime,

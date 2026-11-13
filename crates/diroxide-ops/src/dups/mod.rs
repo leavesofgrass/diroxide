@@ -32,9 +32,9 @@
 //! Nothing here deletes. The app sends the selection to the trash through
 //! the engine, with the plan's listing.
 //!
-//! The full hash is the caller's [`ContentHasher`]: [`Blake3Hasher`] is
-//! the default, the same BLAKE3 the Checksum command computes;
-//! [`Sha256Hasher`] is the other.
+//! The full hash is the caller's [`ContentHasher`]: the app and the
+//! command line give the BLAKE3 the Checksum command computes;
+//! [`Sha256Hasher`] is this crate's own.
 
 mod find;
 mod hash;
@@ -55,7 +55,7 @@ use diroxide_vfs::Registry;
 use crate::pace::Pacer;
 
 pub use find::find_duplicates;
-pub use hash::{Blake3Hasher, ContentHasher, STEP, Sha256Hasher};
+pub use hash::{ContentHasher, STEP, Sha256Hasher};
 pub use recheck::{Rechecked, Refusal, recheck_selection};
 pub use select::{GroupChoice, KeepRule, Selection, select};
 
