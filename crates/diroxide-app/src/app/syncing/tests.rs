@@ -139,7 +139,7 @@ fn compare_folders_says_the_count_line_and_lists_the_differences_status_first() 
     let fake = folders();
     let (mut app, mut runtime) = started(&fake);
     let said = compared(&mut app, &mut runtime);
-    assert_eq!(said[0], "Comparing photos here with backup there");
+    assert_eq!(said[0], "Comparing photos here with backup there.");
     let count = "3 differences in 4 items: 1 different, 1 only here, 1 only there. 1 same.";
     assert!(said.iter().any(|line| line == count), "{said:?}");
     cells(count, "3 differences in 4 items", 73);
@@ -403,7 +403,7 @@ fn a_changed_option_blocks_the_run_until_compare_again() {
     assert_eq!(top(&app), Some("SyncPlan"));
     // Compare again closes the views and compares with the new options.
     let said = enter(&mut app, &mut runtime, AGAIN);
-    assert_eq!(said[0], "Comparing photos here with backup there");
+    assert_eq!(said[0], "Comparing photos here with backup there.");
     assert_eq!(top(&app), Some("SyncResult"));
     let rows = labels(&app);
     assert!(
@@ -418,7 +418,7 @@ fn synchronize_from_the_panel_compares_then_offers_the_modes() {
     let fake = folders();
     let (mut app, mut runtime) = started(&fake);
     let said = run(&mut app, &mut runtime, ids::SYNCHRONIZE);
-    assert_eq!(said[0], "Comparing photos here with backup there");
+    assert_eq!(said[0], "Comparing photos here with backup there.");
     assert_eq!(top(&app), Some("SyncModes"));
     // Compare only goes back to the result.
     enter(&mut app, &mut runtime, NO_MODE);

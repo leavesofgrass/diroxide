@@ -317,9 +317,11 @@ impl App {
             job,
             setup: Box::new(setup),
         })));
+        // Said with its period, so a live region does not run it into
+        // the count line (lane AS); the jobs line keeps none.
         vec![
             Effect::Redraw(Redraw::JobsLine),
-            self.say(Message::info(line)),
+            self.say(Message::info(format!("{line}."))),
         ]
     }
 
@@ -548,7 +550,7 @@ impl App {
         })));
         vec![
             Effect::Redraw(Redraw::JobsLine),
-            self.say(Message::info(line)),
+            self.say(Message::info(format!("{line}."))),
         ]
     }
 
@@ -996,7 +998,7 @@ mod tests {
         // Trash the marked: checked again, then the question on No.
         focus(&mut app, "Trash the marked");
         let asked = key(&mut app, &mut runtime, "enter");
-        assert_eq!(asked[0], "Checking 1 copy again");
+        assert_eq!(asked[0], "Checking 1 copy again.");
         assert_eq!(app.dialog_purpose(), Some("DupsTrash"));
         let question = "Trash 1 copy, 11 bytes? No is the default. y or n";
         assert!(asked.iter().any(|s| s == question), "{asked:?}");

@@ -619,9 +619,10 @@ impl App {
             every_ms,
             then_plan,
         })));
+        // Said with its period (lane AS); the jobs line keeps none.
         vec![
             Effect::Redraw(Redraw::JobsLine),
-            self.say(Message::info(line)),
+            self.say(Message::info(format!("{line}."))),
         ]
     }
 
