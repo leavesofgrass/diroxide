@@ -1,10 +1,10 @@
 //! Every dialog purpose (R27's commit 25, R30's commit 114): the app's
-//! dialogs are 152 purposes drawn as seven shapes: the 77 variants of
+//! dialogs are 153 purposes drawn as seven shapes: the 77 variants of
 //! `Purpose` in `crates/diroxide-app/src/app.rs`, and the 35 lists and
 //! questions the alpha 4 lanes host under `Organize` and `RunArchive`,
 //! each with its own name (`Wants::purpose` in `app/organize.rs`), and
-//! since alpha 5 the tabs' 4 and the 36 dialogs the app lanes host in
-//! their own files ([`HOSTED_FILES`]), 152 in all. This
+//! since alpha 5 the tabs' 4 and the 37 dialogs the app lanes host in
+//! their own files ([`HOSTED_FILES`]), 153 in all. This
 //! test opens each one the app can open from a test through the window,
 //! checking that the dialog has a name and that the keyboard focus is on
 //! a named control inside it. The purposes it cannot open are listed
@@ -44,9 +44,10 @@ const UNREACHABLE: &[(&str, &str)] = &[];
 
 /// How many purposes the app declares: 77 variants of `Purpose`, the
 /// 35 hosted lists and questions of alpha 4, the 4 of the tabs, and
-/// alpha 5's 36: batch rename's 17, compare and synchronize's 6,
-/// duplicates' 7 and the lists' 6.
-const PURPOSES: usize = 152;
+/// alpha 5's 37: batch rename's 17, compare and synchronize's 6,
+/// duplicates' 7 and the lists' 7 (lane AS added FlatCopy, the
+/// keep-folders question).
+const PURPOSES: usize = 153;
 
 /// The purposes whose scenario may say "not made on this system", each
 /// for its reason: a symbolic link needs Developer Mode on Windows; the
@@ -691,8 +692,18 @@ fn lists_collection(root: &Path) -> Rig {
     rig
 }
 
-/// Lists that are not folders (alpha 5, lane LA): collections and their
-/// name prompts, the removal question, the flat view's settings.
+/// The flat view of `work` on, its list in the lister.
+fn flat_on(root: &Path) -> Rig {
+    let mut rig = window(root, |_| {});
+    rig.run("view.flat");
+    answer(&mut rig, "start");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("Results"));
+    rig
+}
+
+/// Lists that are not folders (alpha 5, lanes LA and AS): collections and
+/// their name prompts, the removal question, the flat view's settings
+/// and its keep-folders question.
 fn lists_scenarios() -> Vec<(&'static str, &'static str, Open)> {
     vec![
         ("CollectionName", "Collection name", |root| {
@@ -739,6 +750,13 @@ fn lists_scenarios() -> Vec<(&'static str, &'static str, Open)> {
         ("FlatView", "Flat view of work", |root| {
             let mut rig = window(root, |_| {});
             rig.run("view.flat");
+            Some(rig)
+        }),
+        // Copy out of a flat view asks first (lane AS).
+        ("FlatCopy", "Keep folders, or all in one folder?", |root| {
+            let mut rig = flat_on(root);
+            rig.press("f5");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("FlatCopy"));
             Some(rig)
         }),
         ("FlatViewDepth", "Depth", |root| {

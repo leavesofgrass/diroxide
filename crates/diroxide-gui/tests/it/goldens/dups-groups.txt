@@ -3,7 +3,7 @@ Window "work - diroxide"
     GenericContainer ""
       GenericContainer ""
         Label "work, 9 items, in <dir>" live=polite
-        Label "Finding duplicates in <dir>/work 1 group, 2 files, 14 bytes to free." live=polite
+        Label "Finding duplicates in <dir>/work. 1 group, 2 files, 14 bytes to free." live=polite
       Dialog "Duplicates, 1 group"
         GenericContainer ""
           Label "Enter on a group lists its copies, where Enter marks or keeps one. Choose copies to keep marks all but one in each group. Trash the marked asks first. One copy of each group always stays."
