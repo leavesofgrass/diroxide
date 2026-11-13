@@ -979,6 +979,9 @@ enum Then {
     NoTrash(Message),
     /// A plugin's file job: the plugin hears its report (W4d).
     PluginJob(crate::plugins::CallId),
+    /// Duplicates sent to the trash: the report says the bytes freed
+    /// (lane AS).
+    Freed(u64),
 }
 
 /// Type-ahead: the text typed so far and when it was last typed.

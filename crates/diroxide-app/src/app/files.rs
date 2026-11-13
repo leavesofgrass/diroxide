@@ -1174,6 +1174,11 @@ impl App {
             Then::Renamed(pairs) if clean && pairs.len() > 1 && done > 0 => {
                 format!("Renamed {}.", count(pairs.len() as u64, "file", "files"))
             }
+            // Duplicates trashed: "Freed 4.0 KB: moved 2 items to the
+            // trash. They can be restored." (lane AS).
+            Then::Freed(bytes) if clean && report.kind == JobKind::Trash && done > 0 => {
+                crate::dups_ui::freed_line(done, *bytes)
+            }
             Then::Undid(kind) if clean => undo_words(kind.as_ref(), done),
             _ if cancel_line.is_some() => cancel_line.clone().unwrap_or_default(),
             _ if clean && report.kind == JobKind::Trash => catalog::moved_to_trash(done).text,

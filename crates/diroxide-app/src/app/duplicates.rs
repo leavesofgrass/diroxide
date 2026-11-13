@@ -602,12 +602,15 @@ impl App {
                 self.start_dups(*setup)
             }
             DupsWants::Trash { view, plan } => {
+                // The rechecked plan's bytes: a group refused at the
+                // recheck is not counted.
+                let bytes = plan.facts.bytes;
                 self.flows.insert(
                     plan.job,
                     Flow {
                         side: view.setup.side,
                         note: None,
-                        then: Then::Report,
+                        then: Then::Freed(bytes),
                         confirm: false,
                         kind: JobKind::Trash,
                     },

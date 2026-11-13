@@ -499,6 +499,18 @@ pub fn trash_question(files: usize, bytes: u64) -> String {
     )
 }
 
+/// The report after duplicates went to the trash (lane AS): the trash's
+/// bytes freed first, then the trash's own sentence: "Freed 4.0 KB:
+/// moved 2 items to the trash. They can be restored."
+pub fn freed_line(items: u64, bytes: u64) -> String {
+    let moved = diroxide_core::catalog::moved_to_trash(items).text;
+    let moved = match moved.strip_prefix("Moved") {
+        Some(rest) => format!("moved{rest}"),
+        None => moved,
+    };
+    format!("Freed {}: {moved}", human_size(bytes))
+}
+
 /// "3 hidden files left out".
 pub fn hidden_line(n: u64) -> String {
     if n == 1 {
@@ -635,6 +647,13 @@ mod tests {
         checking.files_done = 3;
         assert_eq!(progress_line(&checking), "Checking again, 3 of 6 files");
         assert_eq!(trash_question(4, 44_000), "Trash 4 copies, 44.0 KB? y or n");
+        let freed = freed_line(2, 4_000);
+        assert_eq!(
+            freed,
+            "Freed 4.0 KB: moved 2 items to the trash. They can be restored."
+        );
+        assert_eq!(cells("Freed 4.0 KB: moved 2 items to the trash."), 41);
+        assert_eq!(cells("Freed 4.0 KB: moved 2 items"), 27);
         assert_eq!(hidden_line(1), "1 hidden file left out");
         assert_eq!(hidden_line(3), "3 hidden files left out");
         let rows = setup().option_rows();
