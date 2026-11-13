@@ -33,6 +33,10 @@
 //!   its checksum lists, the git repositories, the disk images and the
 //!   watched folder), with the owner's steps, in a new or empty folder on
 //!   drive D:.
+//! - `version --check`: before a tag, every place that carries the
+//!   program's version (path dependencies, locks, the plugin workspaces,
+//!   the components files, the README, the guides' sample lines, the
+//!   changelog) says the version in `[workspace.package]`.
 //!
 //! Later waves add `notices` and `dist`.
 
@@ -54,13 +58,14 @@ mod sample;
 mod settings_doc;
 #[cfg(test)]
 mod slow;
+mod version;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] [--assets FOLDER] [--pin ID] [--addresses] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH | demo-tools PATH";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] [--assets FOLDER] [--pin ID] [--addresses] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH | demo-tools PATH | version --check";
 
 fn main() -> ExitCode {
     match run() {
@@ -101,6 +106,7 @@ fn run() -> Result<bool> {
         ["search-tree", rest @ ..] => sample::search_tree(&root, rest),
         ["demo", rest @ ..] => demo::run(&root, rest),
         ["demo-tools", rest @ ..] => demo_tools::run(&root, rest),
+        ["version", "--check"] | ["version"] => version::check(&root),
         _ => {
             eprintln!("{USAGE}");
             Ok(false)
