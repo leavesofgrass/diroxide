@@ -218,6 +218,42 @@ fn closing_says_where_it_lands_the_last_tab_stays_and_undo_brings_it_back() {
     assert_eq!(said, ["No closed tab to bring back."]);
 }
 
+/// R35's quick win 7: a change of the columns setting reaches the parked
+/// tabs and the closed ones, so a switch never changes what a column
+/// says.
+#[test]
+fn a_column_setting_change_reaches_the_parked_and_closed_tabs() {
+    let (mut app, mut runtime) = started(options());
+    run(&mut app, &mut runtime, ids::TAB_NEW);
+    into_src(&mut app, &mut runtime);
+    run(&mut app, &mut runtime, ids::TAB_NEW);
+    run(&mut app, &mut runtime, ids::TAB_CLOSE);
+    assert_eq!(app.tab_count(Side::Left), 2);
+    assert_eq!(app.tab_index(Side::Left), 1);
+
+    let mut columns = app.settings.columns.clone();
+    columns.push("created".to_owned());
+    columns.push("image.taken".to_owned());
+    app.settings.columns = columns;
+    app.columns_setting_changed();
+    let want = app.settings.column_specs();
+    assert_eq!(want.len(), 5);
+    assert_eq!(app.panel(Side::Left).columns(), want.as_slice());
+    assert_eq!(app.panel(Side::Left).field_columns().len(), 1);
+
+    // The parked tab shows the new columns after a switch.
+    let said = run(&mut app, &mut runtime, ids::TAB_PREVIOUS);
+    assert_eq!(said[0], "diroxide-app, tab 1 of 2", "{said:?}");
+    assert_eq!(app.panel(Side::Left).columns(), want.as_slice());
+    assert_eq!(app.panel(Side::Left).field_columns().len(), 1);
+
+    // So does the closed tab Undo close brings back.
+    let said = run(&mut app, &mut runtime, ids::TAB_UNDO_CLOSE);
+    assert!(said[0].starts_with("Reopened src, tab "), "{said:?}");
+    assert_eq!(app.panel(Side::Left).columns(), want.as_slice());
+    assert_eq!(app.panel(Side::Left).field_columns().len(), 1);
+}
+
 #[test]
 fn a_locked_tab_asks_before_closing_and_opens_a_new_tab_to_move() {
     let (mut app, mut runtime) = started(options());

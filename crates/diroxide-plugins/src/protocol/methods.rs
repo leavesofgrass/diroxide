@@ -233,7 +233,7 @@ impl Call {
 /// How far a method is built.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Availability {
-    /// The host serves it, or calls it, in alpha 2.
+    /// The host serves it, or calls it, in this release.
     Served,
     /// Its shape is fixed, with fixtures, so it is decided once; the host
     /// serves it when the feature that needs it arrives.

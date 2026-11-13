@@ -660,6 +660,42 @@ mod tests {
         assert_eq!(bursts(&pictures, 7)[0].len(), 8);
     }
 
+    /// Bursts read the date taken to the second: [`read_fact`] hands the
+    /// Exif text as written to [`Moment::parse`], which keeps its seconds
+    /// (the same bytes `image.taken_second` words, so no second header
+    /// read), and a date with no seconds falls back to the minute.
+    #[test]
+    fn bursts_tell_seconds_apart_within_one_minute() {
+        let gap = diroxide_config::Settings::default()
+            .photos
+            .burst_gap_seconds;
+        assert_eq!(gap, 2);
+        // Three frames two seconds apart in one minute: one burst.
+        let three = [
+            picture("a.jpg", "2026:10:12 14:03:10", Some("Pixel 8")),
+            picture("b.jpg", "2026:10:12 14:03:12", Some("Pixel 8")),
+            picture("c.jpg", "2026:10:12 14:03:14", Some("Pixel 8")),
+        ];
+        let found = bursts(&three, gap);
+        assert_eq!(found, [vec![0, 1, 2]]);
+        assert_eq!(
+            burst_line(&three, &found[0]),
+            "Burst, 3 pictures in 4 seconds"
+        );
+        // Two frames 50 seconds apart in the same minute: no burst.
+        let two = [
+            picture("d.jpg", "2026:10:12 14:03:05", Some("Pixel 8")),
+            picture("e.jpg", "2026:10:12 14:03:55", Some("Pixel 8")),
+        ];
+        assert!(bursts(&two, gap).is_empty());
+        // A date written to the minute counts as its first second.
+        let minute = [
+            picture("f.jpg", "2026-10-12 14:03", Some("Pixel 8")),
+            picture("g.jpg", "2026:10:12 14:03:01", Some("Pixel 8")),
+        ];
+        assert_eq!(bursts(&minute, gap), [vec![0, 1]]);
+    }
+
     #[test]
     fn the_month_plan_and_the_review_say_their_meaning_first() {
         let pictures = vec![

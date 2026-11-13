@@ -85,9 +85,10 @@ pub fn page() -> String {
     out.push_str("\n## Methods\n\n");
     out.push_str(
         "Each method says who sends it, whether it is answered, what allows it, and whether \
-         alpha 2 serves it. A method marked \"shape only\" has its shape and fixtures fixed \
-         now, so it is decided once, and the host serves it when the feature that needs it \
-         arrives.\n",
+         the host serves it in this release. A method marked \"served\" is called or answered \
+         now; `column/format`, for one, is called by the file panels for a plugin's columns. \
+         A method marked \"shape only\" has its shape and fixtures fixed now, so it is \
+         decided once, and the host serves it when the feature that needs it arrives.\n",
     );
     for area in Area::ALL {
         out.push_str(&format!("\n### {}\n\n", area.title()));
@@ -207,6 +208,20 @@ mod tests {
         for retired in ["`config/get`", "`ui/progress`", "`hook/event`"] {
             assert!(!text.contains(retired), "{retired}");
         }
+    }
+
+    /// R35's quick win 3: `column/format` reads as served, in its entry
+    /// and in the methods' opening, never as shape only.
+    #[test]
+    fn column_format_reads_as_served() {
+        let text = page();
+        let entry = text
+            .lines()
+            .find(|line| line.starts_with("- `column/format`:"))
+            .unwrap();
+        assert!(entry.ends_with("State: served."), "{entry}");
+        assert!(!text.contains("alpha 2 serves it"));
+        assert!(text.contains("`column/format`, for one, is called by the file panels"));
     }
 
     #[test]

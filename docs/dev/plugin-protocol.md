@@ -57,7 +57,7 @@ Protocol 1 has 51 requests and 15 notifications. Within protocol 1 only addition
 
 ## Methods
 
-Each method says who sends it, whether it is answered, what allows it, and whether alpha 2 serves it. A method marked "shape only" has its shape and fixtures fixed now, so it is decided once, and the host serves it when the feature that needs it arrives.
+Each method says who sends it, whether it is answered, what allows it, and whether the host serves it in this release. A method marked "served" is called or answered now; `column/format`, for one, is called by the file panels for a plugin's columns. A method marked "shape only" has its shape and fixtures fixed now, so it is decided once, and the host serves it when the feature that needs it arrives.
 
 ### Lifecycle
 
