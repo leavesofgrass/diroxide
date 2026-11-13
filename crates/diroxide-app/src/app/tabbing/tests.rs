@@ -90,7 +90,9 @@ fn a_new_tab_is_a_copy_and_every_tab_keeps_its_own_place() {
     assert!(said[0].starts_with("src, tab 2 of 2, "), "{said:?}");
     assert!(said[0].contains(" items, in "), "{said:?}");
     let said = run(&mut app, &mut runtime, ids::TAB_PREVIOUS);
-    assert_eq!(said, ["diroxide-app, tab 1 of 2"]);
+    // Where a folder cannot be watched (the development container), a
+    // second line says so; the tab line is the first.
+    assert_eq!(said[0], "diroxide-app, tab 1 of 2", "{said:?}");
     assert_eq!(app.panel(Side::Left).place(), &here());
     assert!(!app.panel(Side::Left).is_loading());
     let said = run(&mut app, &mut runtime, ids::TAB_NEXT);
@@ -104,7 +106,9 @@ fn a_new_tab_is_a_copy_and_every_tab_keeps_its_own_place() {
     );
     // Round the end.
     let said = run(&mut app, &mut runtime, ids::TAB_NEXT);
-    assert_eq!(said, ["diroxide-app, tab 1 of 2"]);
+    // Where a folder cannot be watched (the development container), a
+    // second line says so; the tab line is the first.
+    assert_eq!(said[0], "diroxide-app, tab 1 of 2", "{said:?}");
 }
 
 #[test]
@@ -142,7 +146,9 @@ fn a_parked_tabs_late_listing_changes_nothing_and_it_fills_on_return() {
     let slow = app.open(Side::Left, src(), None);
     let switch = app.dispatch(&Command::new(ids::TAB_PREVIOUS));
     let said = settle(&mut app, &mut runtime, switch);
-    assert_eq!(said, ["diroxide-app, tab 1 of 2"]);
+    // Where a folder cannot be watched (the development container), a
+    // second line says so; the tab line is the first.
+    assert_eq!(said[0], "diroxide-app, tab 1 of 2", "{said:?}");
     // The late answer for tab 2 lands while tab 1 is shown.
     settle(&mut app, &mut runtime, slow);
     assert_eq!(app.panel(Side::Left).place(), &here());
