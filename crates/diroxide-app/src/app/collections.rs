@@ -88,6 +88,9 @@ pub(super) enum ListsWants {
         /// Depth, files only, hidden.
         options: FlatOptions,
     },
+    /// Copy or move out of a flat view: keep the folders below its root,
+    /// or put everything in one folder (lane AS).
+    FlatCopy(Box<super::flat::FlatCopy>),
     /// The flat view's depth field.
     FlatDepth {
         /// The panel whose folder it lists.
@@ -108,6 +111,7 @@ impl ListsWants {
             ListsWants::RenameName { .. } => "CollectionRename",
             ListsWants::RemoveCollection { .. } => "CollectionRemove",
             ListsWants::FlatForm { .. } => "FlatView",
+            ListsWants::FlatCopy(_) => "FlatCopy",
             ListsWants::FlatDepth { .. } => "FlatViewDepth",
         }
     }
@@ -496,6 +500,10 @@ impl App {
                 root,
                 options,
             } => self.flat_depth_typed(side, root, options, text),
+            ListsWants::FlatCopy(copy) => match row {
+                Some(row) => self.flat_copy_chosen(*copy, &row),
+                None => Vec::new(),
+            },
         }
     }
 
@@ -539,6 +547,7 @@ impl App {
                 root,
                 options,
             } => self.flat_form_again(side, root, options),
+            ListsWants::FlatCopy(copy) => vec![self.say(Message::info(copy.nothing_done()))],
             _ => Vec::new(),
         }
     }

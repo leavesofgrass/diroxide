@@ -10,6 +10,7 @@ use diroxide_config::{Paths, RecentAction};
 use diroxide_core::{FixedClock, Key, Timestamp, UtcOffset};
 
 use super::*;
+use crate::app::flat::{KEEP_COPY_NOT_BUILT, KEEP_ONE_LEVEL, KEEP_OR_ONE};
 use crate::app::{AppEvent, AppOptions};
 use crate::runtime::Runtime;
 
@@ -354,6 +355,88 @@ fn the_flat_view_lists_every_file_below_and_turns_off() {
     assert_eq!(said, ["Flat view off. work."]);
     assert_eq!(cells("Flat view off. work."), 20);
     assert!(app.dialogs.is_empty());
+}
+
+/// Move out of a flat view asks "Keep folders, or all in one folder?" on
+/// Keep folders; Keep folders makes b/deep in the other panel's folder
+/// and moves each file into its own folder (lane AS).
+#[test]
+fn moving_out_of_a_flat_view_keeps_the_folders_first() {
+    let fixture = fixture();
+    let out = fixture.root.parent().unwrap().join("out").unwrap();
+    fs::create_dir_all(out.to_string()).unwrap();
+    let mut options = AppOptions::new(fixture.root.clone(), out.clone());
+    options.settings.dialog_settle_ms = 0;
+    let mut app = App::new(options);
+    let paths = Paths::new(fixture.state.join("config"), fixture.state.clone());
+    let mut runtime = Runtime::with_local().with_paths(paths);
+    let start = app.start();
+    settle(&mut app, &mut runtime, start);
+
+    run(&mut app, &mut runtime, ids::FLAT_VIEW);
+    focus_row(&mut app, "start");
+    let effects = app.accept();
+    settle(&mut app, &mut runtime, effects);
+    // Mark every row, then two.txt, two levels down, is refused with
+    // Keep folders.
+    for _ in 0..3 {
+        press(&mut app, &mut runtime, "space");
+    }
+    press(&mut app, &mut runtime, "f6");
+    let effects = app.accept();
+    let said = settle(&mut app, &mut runtime, effects);
+    assert_eq!(said[0], KEEP_ONE_LEVEL);
+    assert_eq!(cells(KEEP_ONE_LEVEL), 40);
+    let effects = app.dialog_escape();
+    settle(&mut app, &mut runtime, effects);
+    // Two.txt unmarked: a.txt and b/one.txt are left.
+    let two = top_rows(&app)
+        .into_iter()
+        .find(|row| row.label == "two.txt")
+        .unwrap()
+        .id;
+    focus_row(&mut app, &two);
+    press(&mut app, &mut runtime, "space");
+
+    let said = press(&mut app, &mut runtime, "f6");
+    assert_eq!(cells(KEEP_OR_ONE), 35);
+    assert_eq!(
+        said,
+        [format!(
+            "{KEEP_OR_ONE}, Keep folders, as below the flat view, 1 of 2"
+        )]
+    );
+    for row in top_rows(&app) {
+        assert!(cells(&row.label) <= 40, "{}", row.label);
+    }
+    // Escape does nothing and says so.
+    let effects = app.dialog_escape();
+    let said = settle(&mut app, &mut runtime, effects);
+    assert_eq!(said, ["Nothing moved."]);
+    assert!(app.results_shown());
+
+    press(&mut app, &mut runtime, "f6");
+    let effects = app.accept();
+    let mut said = settle(&mut app, &mut runtime, effects);
+    // The plan is confirmed as any move's is.
+    if app.dialog_purpose().is_some() && !app.results_shown() {
+        let effects = app.handle(AppEvent::Key(Key::parse("y").unwrap()));
+        said.extend(settle(&mut app, &mut runtime, effects));
+    }
+    let landed = |path: &[&str]| {
+        let mut place = out.clone();
+        for name in path {
+            place = place.join(name).unwrap();
+        }
+        Path::new(&place.to_string()).exists()
+    };
+    assert!(landed(&["a.txt"]), "{said:?}");
+    assert!(landed(&["b", "one.txt"]), "b is made in out: {said:?}");
+    assert!(!exists(&fixture, "a.txt"));
+    let two = fixture.root.join("b").unwrap().join("deep").unwrap();
+    let two = two.join("two.txt").unwrap();
+    assert!(Path::new(&two.to_string()).exists(), "not marked");
+    assert_eq!(cells(KEEP_COPY_NOT_BUILT), 39);
 }
 
 #[test]

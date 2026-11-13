@@ -1587,12 +1587,28 @@ impl App {
                 if destination.kind() == diroxide_core::PlaceKind::Archive {
                     return vec![self.say(Message::error(super::archive::READ_ONLY))];
                 }
-                request = request.to(destination);
-                if kind == JobKind::Move {
+                let confirm = if kind == JobKind::Move {
                     self.settings.confirm.move_items
                 } else {
                     self.settings.confirm.copy
+                };
+                // Out of a flat view: keep the folders, or all in one
+                // folder? (lane AS)
+                if let Some(search) = self.searching.current.as_ref()
+                    && search.kind == ListKind::Flat
+                    && let Some(root) = search.root.clone()
+                {
+                    return self.flat_copy_question(super::flat::FlatCopy {
+                        side,
+                        kind,
+                        root,
+                        destination,
+                        sources: request.sources,
+                        confirm,
+                    });
                 }
+                request = request.to(destination);
+                confirm
             }
             JobKind::Trash => self.settings.confirm.trash,
             _ => true,
