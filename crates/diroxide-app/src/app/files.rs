@@ -459,9 +459,10 @@ impl App {
         self.plan_job(side, request, note, Then::Report, true)
     }
 
-    /// Rename: the focused entry, or each marked entry in turn (R10); the
-    /// name prompt opens with the name in it and the cursor before the
-    /// extension. A command with a `name` renames the focused entry.
+    /// Rename: the focused entry (R10); the name prompt opens with the
+    /// name in it and the cursor before the extension. Several marked
+    /// entries open Batch rename (alpha 5, question 132). A command with
+    /// a `name` renames the focused entry.
     pub(super) fn rename(&mut self, command: &Command) -> Vec<Effect> {
         let side = self.active;
         let targets = self.panel(side).targets();
@@ -473,6 +474,11 @@ impl App {
         {
             let name = name.to_owned();
             return self.rename_answer(side, first.clone(), Vec::new(), Vec::new(), &name);
+        }
+        // Several marked and no name: Batch rename (question 132); Rename
+        // one by one is its own command.
+        if !rest.is_empty() && command.text("name").is_none() {
+            return self.batch_rename(command);
         }
         self.rename_prompt(side, first.clone(), rest.to_vec(), Vec::new())
     }

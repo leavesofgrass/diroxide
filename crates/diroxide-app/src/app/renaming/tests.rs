@@ -504,6 +504,27 @@ fn rename_one_by_one_keeps_the_stepping_prompt() {
     assert!(said[0].starts_with("Rename IMG_0001.jpg to"), "{said:?}");
 }
 
+/// Question 132: F2 with several marked opens Batch rename; F2 on one
+/// entry keeps the name prompt (lane AS).
+#[test]
+fn f2_on_several_marked_opens_batch_rename_and_on_one_the_prompt() {
+    let mut f = fixture(&PHOTOS, unchanged);
+    let effects = f.app.handle(AppEvent::Key(Key::parse("f2").unwrap()));
+    let said = f.settle(effects);
+    assert_eq!(
+        said[0],
+        "Batch rename, 3 files, Reading the folder first, 1 of 10"
+    );
+    assert_eq!(f.title(), "Batch rename, 3 files");
+    let effects = f.app.dialog_escape();
+    f.settle(effects);
+    f.run(ids::SELECT_NONE);
+    let effects = f.app.handle(AppEvent::Key(Key::parse("f2").unwrap()));
+    let said = f.settle(effects);
+    assert!(said[0].starts_with("Rename "), "{said:?}");
+    assert!(said[0].contains(" to"), "{said:?}");
+}
+
 #[test]
 fn the_words_fit_forty_cells() {
     for line in [READING, NO_BATCH, DONE_EDITING, NO_PROBLEMS, STILL_READING] {

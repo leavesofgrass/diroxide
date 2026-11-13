@@ -389,7 +389,12 @@ fn rename_steps_through_several_marked_entries() {
     f.s.focus("budget.xlsx");
     f.s.key("space");
     f.s.key("space");
+    // F2 with several marked opens Batch rename (question 132); Rename one
+    // by one steps through them.
     f.s.key("f2");
+    assert_eq!(f.s.dialog_title().as_deref(), Some("Batch rename, 2 files"));
+    f.s.key("escape");
+    f.s.command(ids::RENAME_ONE_BY_ONE);
     assert_eq!(f.s.dialog_title().as_deref(), Some("Rename budget.xlsx to"));
     f.s.type_text("-2026");
     f.s.key("enter");
