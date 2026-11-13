@@ -64,7 +64,11 @@ If you are new, begin with the [quick start](quickstart.md).
 
 - [Search and the filter language](search.md): the one filter language that the panel filter, select by pattern, Search and saved searches share, twenty examples, results, the Space list, newest files, and `diro search`.
 - [Labels and bookmarks](labels-bookmarks.md): labels on files, bookmarks on folders, the History list, a view saved for one folder, and saved searches.
-- [Compare files](compare.md): what two files differ in, said in words first, the change list, the cases that sound the same, binary and large files, and `diro diff`.
+- [Compare files and folders](compare.md): what two files differ in, said in words first, the change list, the cases that sound the same, binary and large files, what two folders differ in, and `diro diff`.
+- [Synchronize](synchronize.md): the five modes, the plan read before anything changes, a row left out or turned around, the question that starts on No, the run with one undo, and `diro sync`.
+- [Duplicates](duplicates.md): files with the same contents found by hash, the groups said largest waste first, five rules for the copy to keep, the trash as the only way out, and `diro dups`.
+- [Batch rename](rename.md): rules for many names, the preview that is the plan, problems first, names edited in your text editor, presets and passes, one undo, and `diro rename`.
+- [Flat view, collections and recent files](collections.md): every file below a folder in one list, named lists of places, saved searches, the files you opened lately, and `diro -` for paths from another program.
 - [Watching a folder](watching.md): hearing when a new file has finished arriving, in the program and with `diro watch`.
 - [Watched folders](watched-folders.md): a folder that converts, moves, copies or notes each file that arrives, its task file, the approval you give first, the Watched folders list, retries and pauses, and `diro watch --task`.
 
