@@ -177,9 +177,15 @@ impl PanelBox {
         if this.widget.view.header != view.header || this.widget.view.active != view.active {
             this.widget.header = None;
         }
+        // The list's own name (a tab's words) changes no drawing, but the
+        // tree must say it.
+        let renamed = this.widget.view.name != view.name;
         this.widget.view = view;
         if relayout {
             this.ctx.request_layout();
+        }
+        if renamed {
+            this.ctx.request_accessibility_update();
         }
         this.ctx.request_render();
     }

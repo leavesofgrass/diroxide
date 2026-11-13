@@ -321,6 +321,8 @@ pub fn panel_grid(panel: &Panel) -> GridModel {
 /// The window's title for the app as it stands: the active panel's place
 /// first, then the program, as the terminal titles its window ("Documents
 /// - diroxide"). A screen reader says it when the window takes the focus.
+/// With more than one tab in the active panel the tab follows the place,
+/// as in the title line: "Documents, tab 2 of 3 - diroxide".
 pub fn window_title(app: &App, program: &str) -> String {
     let panel = app.active_panel();
     // A plugin list over the place names the window, as in the terminal
@@ -330,7 +332,8 @@ pub fn window_title(app: &App, program: &str) -> String {
         None => diroxide_app::panel::place_leaf(panel.loading_place().unwrap_or(panel.place())),
     };
     let shown = diroxide_core::names::display_name(&shown).into_owned();
-    format!("{shown} - {program}")
+    let tab = model::tab_after(app, app.active_side());
+    format!("{shown}{tab} - {program}")
 }
 
 /// Runs the GUI with the app and runtime `diro` built, until the window

@@ -205,33 +205,46 @@ pub fn side_word(side: Side) -> &'static str {
     }
 }
 
-/// The list box's name: the panel, then what it shows.
+/// A panel's tab after what it shows, a comma first: ", tab 2 of 3", with
+/// the lock when one holds (", tab 2 of 3, locked"); empty with one tab,
+/// so a panel of one tab says nothing of tabs (the app's rule, lane TB).
+pub fn tab_after(app: &App, side: Side) -> String {
+    app.tab_title_words(side)
+        .map(|tab| format!(", {tab}"))
+        .unwrap_or_default()
+}
+
+/// The list box's name: the panel, then what it shows, then its tab when
+/// it has more than one: "Left panel, Documents, tab 2 of 3".
 pub fn panel_name(app: &App, side: Side) -> String {
     let panel = app.panel(side);
     let shows = match panel.plugin_list() {
         Some(shown) => display_name(shown.list().title()).into_owned(),
         None => place_leaf(panel.loading_place().unwrap_or(panel.place())),
     };
-    format!("{} panel, {shows}", side_word(side))
+    format!("{} panel, {shows}{}", side_word(side), tab_after(app, side))
 }
 
 /// The other panel's title, from its own place and count (R27's C2: the
 /// app's title line covers only the active panel): "Backup, right panel,
 /// 1 item, in D:\work", with ", loading" while it lists. A plugin list
 /// says its title and its rows: "Changed files, right panel, 2 rows".
+/// With more than one tab, the tab follows what it shows, as in the
+/// app's title line: "Backup, tab 2 of 3, right panel, 1 item".
 pub fn inactive_title(app: &App, side: Side) -> String {
     let panel = app.panel(side);
     let words = side.word();
+    let tab = tab_after(app, side);
     if let Some(shown) = panel.plugin_list() {
         let list = shown.list();
         return format!(
-            "{}, {words} panel, {}",
+            "{}{tab}, {words} panel, {}",
             display_name(list.title()),
             count(list.len() as u64, "row", "rows")
         );
     }
     let place = panel.loading_place().unwrap_or(panel.place());
-    let mut text = format!("{}, {words} panel", place_leaf(place));
+    let mut text = format!("{}{tab}, {words} panel", place_leaf(place));
     if panel.is_loading() {
         text.push_str(", loading");
     } else {
@@ -260,12 +273,14 @@ pub fn panel_header(app: &App, side: Side) -> String {
     }
 }
 
-/// A number that changes when a panel shows another list: its place, or a
-/// plugin list over it.
+/// A number that changes when a panel shows another list: its place, its
+/// tab (two tabs on one folder are two lists, lane TB), or a plugin list
+/// over it.
 pub fn generation(app: &App, side: Side) -> u64 {
     let panel = app.panel(side);
     let mut hasher = DefaultHasher::new();
     panel.place().to_string().hash(&mut hasher);
+    panel.tab_id().hash(&mut hasher);
     if let Some(shown) = panel.plugin_list() {
         shown.plugin_id().hash(&mut hasher);
         shown.id().hash(&mut hasher);
