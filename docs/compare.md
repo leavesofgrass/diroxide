@@ -1,6 +1,6 @@
 # Compare files
 
-This guide covers Compare files: what two files differ in, said in words before any change is shown. It describes which two files diroxide compares, the texts a plugin can hand over to compare, what you hear and in what order, how to walk the changes, the options that leave differences out, binary and large files, and `diro diff` for the command line. Comparing two folders comes in a later alpha.
+This guide covers Compare files: what two files differ in, said in words before any change is shown. It describes which two files diroxide compares, the texts a plugin can hand over to compare, what you hear and in what order, how to walk the changes, the options that leave differences out, binary and large files, and `diro diff` for the command line. It also covers comparing two folders, which says what differs between the panels' folders; [Synchronize](synchronize.md) turns that result into a plan.
 
 What this guide says comes from the design and from the tests that check each sentence. Nothing in alpha 1 had been heard on a screen reader when this guide was written, because the listening tests come after the build, so the lines below are what diroxide is built to say. [The accessibility statement](accessibility.md) says what has been checked.
 
@@ -20,7 +20,7 @@ Before it starts, the status line says which two. For two marked files: "Compari
 
 The direction is from the first file to the second. For one file in each panel, that is from the other panel's file to this panel's, and the report says so: "From the other panel to this panel." For two marked files it names them: "From old.txt to report.txt." Swap turns it around and says so: "Swapped. From this panel to the other panel." Nothing is compared again when you swap.
 
-Two folders, a folder and a file, or a file inside an archive are not compared in alpha 1. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Mark two files, or focus a file in each panel, to compare." or "No file to compare report.txt with in the other panel. Focus one there, or mark two here."
+Compare files compares two files. A folder and a file, or a file inside an archive, are not compared as files, and two folders are compared by [Compare folders](#compare-two-folders) below. The message says what to do: "Could not compare D:/diro-demo: it is not a file. Choose two files to compare." or "Mark two files, or focus a file in each panel, to compare." or "No file to compare report.txt with in the other panel. Focus one there, or mark two here."
 
 ## Texts from a plugin
 
@@ -147,9 +147,63 @@ Compare properties is in the Compare submenu (F9, then R, then O, then P) and th
 
 Select the differences (Compare submenu, D; Shift+F2 in the Total Commander preset) looks at the two folders in the panels and marks, in both, the entries only here, the entries only there, and those that differ in size or are newer: "Marked 9: 4 only here, 2 only there, 3 different". When there is nothing to mark: "No differences: both panels hold the same names, sizes and times". It does not look inside subfolders.
 
+## Compare two folders
+
+Compare folders says what differs between the folder in this panel and the folder in the other panel: which names are only in one, which are newer, which differ. It changes nothing. It is in the Tools menu (Alt+T, then A), in the palette as Compare folders, and it has no key of its own. [Synchronize](synchronize.md) makes a plan from the result.
+
+Rows say "here" for this panel and "there" for the other, and sentences say "this panel" and "the other panel". Nothing is said as left or right, because which side a panel is on can change.
+
+### The criteria
+
+Compare folders opens a list of criteria first, and the first row is the one that runs:
+
+- "By size and time, within 2 seconds": two files are the same when their sizes are the same and their times are within two seconds. Two seconds is the step of a FAT drive, so it is the least a tolerance can be.
+- "By size only, times not looked at".
+- "By contents, reads both files": files of the same size are read block by block, and stop at the first difference.
+- "Subfolders", "Hidden items" and "Ignore a 1 hour shift" are switches, each said with its state after it: "Subfolders: on", "Hidden items: on", "Ignore a 1 hour shift: off". Enter on one turns it on or off. Hidden items are included whatever the panel shows.
+
+Enter on a By row compares with that row. Escape closes the list and says "Nothing was compared." The tolerance and the hour shift start from two settings: `compare.folder_tolerance_seconds` (2; 2 to 3600) and `compare.folder_hour_shift` (off), in the Compare group of Settings. An hour shift is for a FAT drive across daylight saving, where every time is an hour off.
+
+Both panels must show different folders: "Cannot compare: both panels show photos".
+
+### The result
+
+The compare is a job. It says "Comparing photos here with backup there" when it starts, says its progress at the progress interval, and Escape cancels it. A cancelled compare leaves rows that say "Not compared", never a result that looks clean.
+
+The result is a list. Its name is a count line that adds up, in the form "17 differences in 1,202 items: 12 only here, 3 only there, 2 different. 1,185 same." With none: "No differences in 214 items." Under it the notes say how the compare decided, such as "Compared by size and time; times within 2 seconds count as the same."
+
+Each row starts with its status, then the name, then the reason. By default only the differences are listed, problems first:
+
+- "Only here, inner.txt, in sub" and "Only there, ..."
+- "Different, newer.txt, newer here", "Different, differs.txt, larger there, same time" or "Different, a.txt, same size, content differs"
+- "Type differs, clash, file here, folder there"
+- "Unreadable there, locked, ..." and "Skipped, cache.tmp, matches the filter *.tmp"
+- "Same, a.txt, times within 2 seconds", when the same rows are shown
+
+The actions are the last rows of the list:
+
+- "Synchronize: plan the changes" opens [the synchronize modes](synchronize.md).
+- "Show 1 same row", and then "Showing: all differences" or "Showing only different: 1 row", switch what the list shows.
+- "Open the differences as a list" opens them in the general list, where the usual keys for a list apply: "Differences as a list, 3 files".
+- "Compare again" compares with the criteria as they are now.
+
+Enter on a Different row opens a comparison of the two files, the same Compare files screens as above.
+
+If you change the tolerance or the hour shift setting after a compare, the result no longer matches: "Compare again: the options changed", and Synchronize waits for it.
+
+### From a shell
+
+`diro diff BEFORE AFTER` with two folders prints the count line, how the rows were decided, then one row for each difference:
+
+```bash
+diro diff here there
+```
+
+`--brief` or `-q` prints the count line only. `--names` or `-0` prints the relative paths that differ, separated by NUL, for a pipeline. The exit codes are 0 for the same, 1 for different and 2 for trouble, such as the same folder twice: "Cannot compare: ...". `--format` is for two files, and with two folders it is refused.
+
 ## diro diff
 
-`diro diff BEFORE AFTER` is Compare files for a shell. It prints the same report: the verdict, the counts, the direction, then one row for each change.
+`diro diff BEFORE AFTER` is Compare files for a shell. With two folders it is the folder compare above; the rest of this section is about files. It prints the same report: the verdict, the counts, the direction, then one row for each change.
 
 ```bash
 diro diff old.txt report.txt
@@ -178,7 +232,7 @@ The exit codes are 0 for the same, 1 for different, and 2 for wrong use or troub
 
 ## Limits
 
-- Only two files at a time. Folders compare in a later alpha.
+- Only two files at a time. Folders are compared by Compare folders, which decides by size, time or contents and does not say what differs inside a file. Enter on a Different row compares the two files.
 - The unified view is a list, not a mode of the viewer. Enter on a row opens the viewer at its line.
 - Text is compared in full up to 16 MiB for each file.
 - Unicode forms are recognized for Latin, Greek, Cyrillic and Hangul. "Sounds alike" covers space characters, dashes, quotes, full-width letters and a short list of Cyrillic and Greek letters that look Latin.
@@ -190,6 +244,7 @@ The exit codes are 0 for the same, 1 for different, and 2 for wrong use or troub
 
 ## See also
 
+- [Synchronize](synchronize.md)
 - [The viewer](viewer.md)
 - [Search and the filter language](search.md)
 - [The panels](panels.md)
