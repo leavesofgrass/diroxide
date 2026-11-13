@@ -480,6 +480,12 @@ fn save_as_collection_keeps_the_list_on_the_screen() {
     assert_eq!(said, ["Collection name for 2 items, empty"]);
     let said = typed(&mut app, &mut runtime, "From a shell");
     assert_eq!(said, ["Added 2 to From a shell."]);
+    // The list stays on the screen after the name, so a second save
+    // keeps it again; with no list, the panel's focused entry.
+    assert!(app.results_shown());
+    let said = run(&mut app, &mut runtime, ids::SAVE_AS_COLLECTION);
+    assert_eq!(said, ["Collection name for 2 items, empty"]);
+    close(&mut app, &mut runtime);
     let said = run(&mut app, &mut runtime, ids::SAVE_AS_COLLECTION);
     close(&mut app, &mut runtime);
     assert_eq!(
@@ -488,6 +494,95 @@ fn save_as_collection_keeps_the_list_on_the_screen() {
         "the panel's focused entry"
     );
     assert_eq!(cells(NOTHING_TO_SAVE), 36);
+}
+
+/// Runs a command the way the owner does over an open list: the palette
+/// opens on top of the lister, its row is chosen and Enter runs it.
+fn through_palette(app: &mut App, runtime: &mut Runtime, id: &CommandId) -> Vec<String> {
+    let effects = app.handle(AppEvent::Command(Command::new(ids::PALETTE)));
+    settle(app, runtime, effects);
+    match app.dialogs.last_mut() {
+        Some((
+            _,
+            Dialog::Edit {
+                candidates: Some(list),
+                in_list,
+                ..
+            },
+        )) => {
+            assert!(list.focus_id(id.as_str()), "no palette row {id:?}");
+            *in_list = true;
+        }
+        _ => panic!("the palette did not open"),
+    }
+    let effects = app.accept();
+    settle(app, runtime, effects)
+}
+
+#[test]
+fn the_palette_saves_collects_and_removes_missing_over_an_open_list() {
+    let fixture = fixture();
+    let (mut app, mut runtime) = started(&fixture);
+    let places = vec![
+        fixture.root.join("a.txt").unwrap(),
+        fixture.root.join("b").unwrap(),
+    ];
+    let effects = app.open_place_list("Standard input", "2 paths from standard input", places);
+    settle(&mut app, &mut runtime, effects);
+
+    // Save as collection keeps the list's two rows, not the panel's entry.
+    let said = through_palette(&mut app, &mut runtime, &ids::SAVE_AS_COLLECTION);
+    let line = "Collection name for 2 items, empty";
+    assert_eq!(said, [line]);
+    assert_eq!(cells(line), 34);
+    let said = typed(&mut app, &mut runtime, "From a shell");
+    assert_eq!(said, ["Added 2 to From a shell."]);
+    assert!(app.results_shown(), "the list stays on the screen");
+
+    // Collect takes the focused row.
+    let said = through_palette(&mut app, &mut runtime, &ids::COLLECT);
+    let line = "Added 1 to Collected.";
+    assert_eq!(said, [line]);
+    assert_eq!(cells(line), 21);
+    assert!(app.results_shown());
+
+    // Remove missing items, over a collection with a gone item.
+    close(&mut app, &mut runtime);
+    let collections = diroxide_search::Collections::in_state_folder(&fixture.state);
+    let gone = fixture.root.join("gone.txt").unwrap();
+    collections
+        .add("Trip photos", [gone], app.clock.as_ref())
+        .unwrap();
+    run(&mut app, &mut runtime, ids::COLLECTIONS);
+    focus_row(&mut app, "Trip photos");
+    let effects = app.accept();
+    settle(&mut app, &mut runtime, effects);
+    let said = through_palette(&mut app, &mut runtime, &ids::COLLECTION_REMOVE_MISSING);
+    let line = "Removed 1 from Trip photos. The file was not touched.";
+    assert_eq!(said, [line]);
+    assert!(app.results_shown());
+    assert!(top_rows(&app).is_empty());
+}
+
+#[test]
+fn the_results_actions_list_offers_save_as_collection() {
+    let fixture = fixture();
+    let (mut app, mut runtime) = started(&fixture);
+    let places = vec![fixture.root.join("a.txt").unwrap()];
+    let effects = app.open_place_list("Standard input", "1 path from standard input", places);
+    settle(&mut app, &mut runtime, effects);
+    press(&mut app, &mut runtime, "shift+f10");
+    let labels: Vec<String> = top_rows(&app).into_iter().map(|r| r.label).collect();
+    assert!(
+        labels.iter().any(|l| l == "Save as collection"),
+        "{labels:?}"
+    );
+    assert!(labels.iter().any(|l| l == "Collect"), "{labels:?}");
+    assert!(!labels.iter().any(|l| l == "Remove missing items"));
+    focus_row(&mut app, ids::SAVE_AS_COLLECTION.as_str());
+    let effects = app.accept();
+    let said = settle(&mut app, &mut runtime, effects);
+    assert_eq!(said, ["Collection name for 1 item, empty"]);
 }
 
 #[test]

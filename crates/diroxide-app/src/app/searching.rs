@@ -167,6 +167,14 @@ const ROUTES: [(CommandId, Do); 5] = [
     (ids::SEARCH_REMOVE_ROW, Do::Remove),
 ];
 
+/// The commands that act on the list on the screen when the palette or a
+/// menu runs them over the results lister (alpha 5, lane AS).
+const LIST_COMMANDS: [CommandId; 3] = [
+    ids::SAVE_AS_COLLECTION,
+    ids::COLLECT,
+    ids::COLLECTION_REMOVE_MISSING,
+];
+
 fn route(id: &CommandId) -> Option<Do> {
     ROUTES
         .iter()
@@ -1265,7 +1273,7 @@ impl App {
     /// The actions on the results, as a list (the context menu's key):
     /// each runs on the marked results, or the focused one.
     fn results_menu(&mut self) -> Vec<Effect> {
-        let actions: [(CommandId, &str); 12] = [
+        let mut actions: Vec<(CommandId, &str)> = vec![
             (ids::VIEW, "View at the match"),
             (ids::EDIT, "Edit at the line"),
             (ids::SEARCH_SHOW_IN_FOLDER, "Show in its folder"),
@@ -1275,10 +1283,17 @@ impl App {
             (ids::FILTER, "Refine results"),
             (ids::SEARCH_REMOVE_ROW, "Remove from results"),
             (ids::SEARCH_PAUSE, "Pause or resume search"),
+            (ids::SAVE_AS_COLLECTION, "Save as collection"),
+            (ids::COLLECT, "Collect"),
+        ];
+        if self.list_collection().is_some() {
+            actions.push((ids::COLLECTION_REMOVE_MISSING, "Remove missing items"));
+        }
+        actions.extend([
             (ids::FIND, "Search again"),
             (ids::SEARCH_SAVE, "Save this search"),
             (ids::EARLIER_DAY, "Earlier day"),
-        ];
+        ]);
         let rows = actions
             .iter()
             .map(|(id, name)| {
@@ -1315,6 +1330,11 @@ impl App {
             id if *id == ids::MOVE => self.result_job(JobKind::Move),
             id if *id == ids::TRASH => self.result_job(JobKind::Trash),
             id if *id == ids::FILTER => self.refine_prompt(),
+            // Save as collection, Collect and Remove missing items act on
+            // the list on the screen, which is on top here.
+            id if LIST_COMMANDS.contains(id) => self
+                .lists_dispatch(&Command::new(id.clone()))
+                .unwrap_or_default(),
             id => self.dispatch(&Command::new(id.clone())),
         }
     }
@@ -1986,6 +2006,55 @@ impl App {
     )]
     pub(crate) fn list_owner(&self) -> Option<(Side, u64)> {
         self.searching.current.as_ref()?.owner
+    }
+
+    /// The places of the list on the screen (alpha 5, lane AS): its marked
+    /// rows, or every row it shows, each place once, in the list's order;
+    /// empty when the results lister is not on top. Save as collection
+    /// keeps these.
+    pub(crate) fn list_places(&self) -> Vec<Place> {
+        if !self.results_on_top() {
+            return Vec::new();
+        }
+        let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last() else {
+            return Vec::new();
+        };
+        let marked: Vec<String> = list.selected_ids().into_iter().map(str::to_owned).collect();
+        let ids: Vec<String> = if marked.is_empty() {
+            list.rows().iter().map(|r| r.id.clone()).collect()
+        } else {
+            marked
+        };
+        let mut places: Vec<Place> = Vec::new();
+        for id in &ids {
+            if let Some(hit) = self.hit_of(id)
+                && !places.contains(&hit.place)
+            {
+                places.push(hit.place);
+            }
+        }
+        places
+    }
+
+    /// A command chosen in the palette or a menu over the results lister
+    /// that acts on the list (Save as collection, Collect, Remove missing
+    /// items): the dialogs above the lister close, the lister stays, and
+    /// the command runs on it through [`App::results_action`]. `None` for
+    /// any other command, or when no lister is open under the dialog.
+    pub(super) fn list_command_over(&mut self, id: &CommandId) -> Option<Vec<Effect>> {
+        if !LIST_COMMANDS.contains(id) {
+            return None;
+        }
+        let index = self
+            .opens
+            .iter()
+            .rposition(|o| matches!(o.purpose, Purpose::Results))?;
+        let mut effects = Vec::new();
+        while self.opens.len() > index + 1 && !self.dialogs.is_empty() {
+            effects.extend(self.close_top());
+        }
+        effects.extend(self.results_action(id));
+        Some(effects)
     }
 
     /// The collection whose items the list shows, when it is one.

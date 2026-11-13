@@ -194,29 +194,19 @@ impl App {
     /// The places of the list on the screen: its marked rows, or all its
     /// rows; empty when the results lister is not on top.
     fn lister_places(&self, focused_only: bool) -> Vec<Place> {
+        if !focused_only {
+            return self.list_places();
+        }
         if !self.lister_on_top() {
             return Vec::new();
         }
         let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last() else {
             return Vec::new();
         };
-        let ids: Vec<String> = if focused_only {
-            list.focused().map(|r| r.id.clone()).into_iter().collect()
-        } else {
-            let marked: Vec<String> = list.selected_ids().into_iter().map(str::to_owned).collect();
-            if marked.is_empty() {
-                list.rows().iter().map(|r| r.id.clone()).collect()
-            } else {
-                marked
-            }
-        };
-        let mut places: Vec<Place> = Vec::new();
-        for place in ids.iter().filter_map(|id| place_of_row(id)) {
-            if !places.contains(&place) {
-                places.push(place);
-            }
-        }
-        places
+        list.focused()
+            .and_then(|r| place_of_row(&r.id))
+            .into_iter()
+            .collect()
     }
 
     /// The Collections list: collections and saved searches, read from
@@ -473,7 +463,9 @@ impl App {
                 if name.is_empty() {
                     return vec![self.say(Message::status("A collection needs a name."))];
                 }
-                let mut effects = self.close_all();
+                // Only the name field closes: the list it was saved from
+                // stays on the screen.
+                let mut effects = self.close_top();
                 let clock = SharedClock(Arc::clone(&self.clock));
                 self.lists_ask(ListsAsk::Add {
                     name: name.to_owned(),

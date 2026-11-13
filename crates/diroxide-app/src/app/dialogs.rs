@@ -295,6 +295,12 @@ impl App {
             Action::Cancel => self.dialog_escape(),
             Action::Quit | Action::QuitToFolder => self.ask_quit(false),
             Action::QuitKeepFolder => self.ask_quit(true),
+            // The palette and the menus open over the results lister, so
+            // Save as collection, Collect and Remove missing items reach
+            // the list on the screen (alpha 5, lane AS).
+            Action::Palette if self.results_shown() => self.open_palette(),
+            Action::MenuBar if self.results_shown() => self.open_menu_bar(),
+            Action::Menu if self.results_shown() => self.open_menu_by_command(&command.id),
             Action::Menu => {
                 if matches!(
                     self.top_purpose(),
@@ -655,6 +661,9 @@ impl App {
                     key: state::keys::PALETTE.to_owned(),
                     entries: recent,
                 });
+                if let Some(effects) = self.list_command_over(&id) {
+                    return effects;
+                }
                 let mut effects = self.close_all();
                 effects.extend(self.dispatch(&Command::new(id)));
                 effects
@@ -679,6 +688,9 @@ impl App {
                 let Ok(id) = CommandId::new(row) else {
                     return Vec::new();
                 };
+                if let Some(effects) = self.list_command_over(&id) {
+                    return effects;
+                }
                 let mut effects = self.close_all();
                 effects.extend(self.dispatch(&Command::new(id)));
                 effects
