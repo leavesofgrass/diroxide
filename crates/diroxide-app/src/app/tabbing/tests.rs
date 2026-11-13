@@ -20,6 +20,10 @@ fn src() -> Place {
     here().join("src").unwrap()
 }
 
+/// What the app said, without the watcher's notice: where a folder
+/// cannot be watched (the development container), a tab that lists a
+/// folder also says "Folder not watched. Reload with Ctrl+R.", which is
+/// the machine's line and not the tabs'.
 fn settle(app: &mut App, runtime: &mut Runtime, effects: Vec<Effect>) -> Vec<String> {
     runtime
         .run_until_idle(app, effects)
@@ -28,6 +32,7 @@ fn settle(app: &mut App, runtime: &mut Runtime, effects: Vec<Effect>) -> Vec<Str
             Effect::Announce(message) => Some(message.text),
             _ => None,
         })
+        .filter(|line| !line.starts_with("Folder not watched."))
         .collect()
 }
 
