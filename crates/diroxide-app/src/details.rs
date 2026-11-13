@@ -247,7 +247,7 @@ pub fn read_fields_with(
 /// the details say the date taken once, as "Taken".
 const WORKING_KEYS: [&str; 1] = ["image.taken_second"];
 
-/// The details without the [`WORKING_KEYS`], so a fact is not said twice.
+/// The details without the working keys, so a fact is not said twice.
 pub fn without_working_keys(fields: Vec<Field>) -> Vec<Field> {
     fields
         .into_iter()

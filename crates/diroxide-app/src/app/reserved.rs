@@ -1,20 +1,20 @@
 //! The commands reserved for alpha 5's app lanes by the pre-wiring step
-//! (lane P5), and the one line their stubs say until a lane fills them.
+//! (lane P5), and the one line their stubs said until a lane filled them.
 //!
 //! Each lane's dispatch (`renaming.rs`, `syncing.rs`, `duplicates.rs`,
-//! `collections.rs`) routes its ids to functions in its own files; each
-//! such function starts as [`App::not_built`], which says "Not built yet:
-//! NAME." with the command's catalog name. The test that no reserved
-//! command still says it is ignored until the close of the wave
-//! (commit 46), when the orchestrator turns it on.
+//! `collections.rs`) routes its ids to functions in its own files. Each
+//! such function started as a stub that said "Not built yet: NAME." with
+//! the command's catalog name. Every lane has filled its arms, so the
+//! stub is gone, and a test holds that no reserved command says the
+//! line again.
 
-use diroxide_core::{CommandId, Message};
+use diroxide_core::CommandId;
 
-use super::{App, Effect};
-use crate::commands::{self, ids};
+use crate::commands::ids;
 
-/// The start of the line a reserved command says until its lane fills it.
-pub(super) const NOT_BUILT: &str = "Not built yet: ";
+/// The start of the line a reserved command said until its lane filled it.
+#[cfg(test)]
+const NOT_BUILT: &str = "Not built yet: ";
 
 /// Every reserved command, with the lane that fills it: the tests walk it.
 #[cfg_attr(not(test), allow(dead_code, reason = "read by the tests"))]
@@ -45,15 +45,6 @@ pub(super) const RESERVED: [(CommandId, &str); 24] = [
     (ids::RECENT_CLEAR, "LA"),
 ];
 
-impl App {
-    /// What a reserved command says until its lane fills it: "Not built
-    /// yet: Batch rename." with the command's catalog name.
-    pub(super) fn not_built(&mut self, id: &CommandId) -> Vec<Effect> {
-        let name = commands::name_of(id);
-        vec![self.say(Message::info(format!("{NOT_BUILT}{name}.")))]
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -61,7 +52,8 @@ mod tests {
     use diroxide_core::{Command, FixedClock, Place, Timestamp, UtcOffset};
 
     use super::*;
-    use crate::app::AppOptions;
+    use crate::app::{App, AppOptions, Effect};
+    use crate::commands;
     use crate::runtime::Runtime;
 
     fn here() -> Place {
@@ -164,7 +156,7 @@ mod tests {
         // The trash key in a collection: lane LA's removal, not the trash.
         let effects = app.handle(crate::app::AppEvent::Key(Key::parse("delete").unwrap()));
         let said = announced(runtime.run_until_idle(&mut app, effects));
-        assert_eq!(said, [format!("{NOT_BUILT}Remove from collection.")]);
+        assert_eq!(said, ["Lists need a state folder, and this run has none."]);
         let effects = app.dialog_escape();
         runtime.run_until_idle(&mut app, effects);
 
@@ -205,10 +197,9 @@ mod tests {
         }
     }
 
-    /// Turned on at the close of alpha 5 (commit 46): by then every lane
-    /// has filled its arms.
+    /// On since the four app lanes of alpha 5 merged: every lane has
+    /// filled its arms.
     #[test]
-    #[ignore = "turned on at the close of alpha 5, when every app lane has merged"]
     fn no_reserved_command_is_left_unbuilt() {
         let (mut app, mut runtime) = started();
         let left: Vec<String> = RESERVED
