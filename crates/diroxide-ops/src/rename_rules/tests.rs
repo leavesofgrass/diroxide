@@ -273,10 +273,7 @@ fn the_count_line_leads_with_the_worst_news_inside_40_cells() {
             part: Part::Stem,
         }]),
     );
-    assert_eq!(
-        care.count_line(),
-        "No problems, 2 need care. 2 of 2 change."
-    );
+    assert_eq!(care.count_line(), "2 need care. 2 of 2 will change.");
     assert_eq!(
         care.question(),
         format!("Rename 2 files in {}, 2 need care?", p("/a"))
@@ -286,12 +283,12 @@ fn the_count_line_leads_with_the_worst_news_inside_40_cells() {
         care.count_line(),
         clean.count_line(),
         "2 problems. 46 of 50 files will change.".to_owned(),
-        "No problems, 3 need care. 47 of 50 change.".to_owned(),
+        "3 need care. 47 of 50 will change.".to_owned(),
         "47 of 50 files will change. No problems.".to_owned(),
         "1,000 problems. 9,000 of 10,000 files will change.".to_owned(),
     ];
     let counts: Vec<usize> = lines.iter().map(|line| cells(line)).collect();
-    assert_eq!(counts, [37, 40, 38, 39, 42, 40, 50]);
+    assert_eq!(counts, [37, 32, 38, 39, 34, 40, 50]);
     // Past 40 cells, the problems and the first count still lead.
     assert!(
         lines[6]
@@ -352,10 +349,7 @@ fn a_row_that_cannot_change_keeps_its_name_and_others_clash_with_it() {
     // Portable names off: Linux takes a colon, so both go ahead in turn.
     let plan = plan_rename(&sources, &recipe, &context.clone().portable(false)).unwrap();
     assert_eq!(plan.problems(), 0);
-    assert_eq!(
-        plan.count_line(),
-        "No problems, 1 needs care. 2 of 2 change."
-    );
+    assert_eq!(plan.count_line(), "1 needs care. 2 of 2 will change.");
 }
 
 #[test]
@@ -384,10 +378,7 @@ fn names_not_allowed_are_said_in_words() {
         care.rows()[0].line(),
         "Care, has hidden characters: a.txt becomes a[U+200B].txt"
     );
-    assert_eq!(
-        care.count_line(),
-        "No problems, 1 needs care. 1 of 1 change."
-    );
+    assert_eq!(care.count_line(), "1 needs care. 1 of 1 will change.");
     assert_eq!(
         care.question(),
         format!("Rename 1 file in {}, 1 needs care?", p("/a"))
@@ -511,7 +502,9 @@ fn the_keyed_editor_round_trip_reads_any_order_and_refuses_lost_lines() {
         EditorFormat::Keyed,
     )
     .unwrap_err();
-    assert_eq!(lost.line(), "Names not read: line 2 has no known (was ...)");
+    let line = "Names not read: line 2, unknown (was)";
+    assert_eq!(lost.line(), line);
+    assert_eq!(line.chars().count(), 37);
     let twice = "a (was IMG_1.jpg)\nb (was IMG_1.jpg)\nc (was notes.txt)\n";
     let twice = read_editor_text(&plan, twice, EditorFormat::Keyed).unwrap_err();
     assert_eq!(twice, EditorRefused::UnknownKey(2));
