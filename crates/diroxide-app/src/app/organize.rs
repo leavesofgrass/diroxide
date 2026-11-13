@@ -438,6 +438,8 @@ impl App {
             Wants::Photos(wants) => self.photo_key(&wants, key),
             // Space changes a copy's mark in the duplicates list (lane AS).
             Wants::Dups(wants) => self.dups_key(&wants, key),
+            // Space leaves a synchronize plan row out or takes it back.
+            Wants::Sync(wants) => self.sync_key(&wants, key),
             _ => None,
         }
     }

@@ -32,8 +32,8 @@ use std::sync::Arc;
 
 use diroxide_core::format::count;
 use diroxide_core::{
-    Command, CommandId, Effect, EntryKind, JobId, JobKind, ListModel, ListRow, Message, Place,
-    Redraw, Side,
+    Command, CommandId, Effect, EntryKind, JobId, JobKind, Key, KeyCode, ListModel, ListRow,
+    Message, Place, Redraw, Side,
 };
 use diroxide_ops::sync::{
     CompareBy, CompareRow, Comparison, RowState, RowStatus, SyncAction, SyncMode, SyncPlan, at,
@@ -974,6 +974,20 @@ impl App {
         };
         effects.extend(self.change_row(view, index, |plan| change(plan, index)));
         effects
+    }
+
+    /// A key in a synchronize list (lane AS): Space on a plan row leaves
+    /// it out or takes it back in, and the row's new line is said once;
+    /// `None` for any other key or list.
+    pub(super) fn sync_key(&mut self, wants: &SyncWants, key: &Key) -> Option<Vec<Effect>> {
+        let SyncWants::Plan(view) = wants else {
+            return None;
+        };
+        if key.code != KeyCode::Char(' ') || !key.mods.is_empty() {
+            return None;
+        }
+        let index = row_index(&self.top_row_id()?, 'p')?;
+        Some(self.change_row((**view).clone(), index, |plan| plan.toggle(index)))
     }
 
     /// Changes one row of the plan view on top, says its new line, or the

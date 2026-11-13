@@ -14,7 +14,7 @@ use diroxide_ops::FakeProvider;
 use diroxide_vfs::Registry;
 
 use super::*;
-use crate::app::AppOptions;
+use crate::app::{AppEvent, AppOptions};
 use crate::runtime::Runtime;
 
 fn local(path: &str) -> Place {
@@ -304,6 +304,17 @@ fn the_plan_rows_start_with_their_action_and_a_row_can_change() {
     let said = enter(&mut app, &mut runtime, &row);
     assert_eq!(said, ["plan.md: Take back in, 1 of 2"]);
     let said = enter(&mut app, &mut runtime, TOGGLE);
+    assert_eq!(said, [copy]);
+    // Space does the same from the plan itself, the new line said once
+    // (lane AS).
+    let space = |app: &mut App, runtime: &mut Runtime| {
+        let effects = app.handle(AppEvent::Key(Key::parse("space").unwrap()));
+        self::said(runtime.run_until_idle(app, effects))
+    };
+    let said = space(&mut app, &mut runtime);
+    assert_eq!(said, ["Left out: plan.md, would copy there"]);
+    assert_eq!(top(&app), Some("SyncPlan"));
+    let said = space(&mut app, &mut runtime);
     assert_eq!(said, [copy]);
 
     // The skipped row there can be copied toward this panel.
