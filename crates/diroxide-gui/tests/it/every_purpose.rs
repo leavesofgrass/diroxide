@@ -1,8 +1,10 @@
 //! Every dialog purpose (R27's commit 25, R30's commit 114): the app's
-//! dialogs are 112 purposes drawn as seven shapes: the 77 variants of
+//! dialogs are 152 purposes drawn as seven shapes: the 77 variants of
 //! `Purpose` in `crates/diroxide-app/src/app.rs`, and the 35 lists and
 //! questions the alpha 4 lanes host under `Organize` and `RunArchive`,
-//! each with its own name (`Wants::purpose` in `app/organize.rs`). This
+//! each with its own name (`Wants::purpose` in `app/organize.rs`), and
+//! since alpha 5 the tabs' 4 and the 36 dialogs the app lanes host in
+//! their own files ([`HOSTED_FILES`]), 152 in all. This
 //! test opens each one the app can open from a test through the window,
 //! checking that the dialog has a name and that the keyboard focus is on
 //! a named control inside it. The purposes it cannot open are listed
@@ -41,8 +43,10 @@ use crate::rig::{HostOf, Rig, app_with, name_of};
 const UNREACHABLE: &[(&str, &str)] = &[];
 
 /// How many purposes the app declares: 77 variants of `Purpose`, the
-/// 35 hosted lists and questions of alpha 4 and the 4 of the tabs.
-const PURPOSES: usize = 116;
+/// 35 hosted lists and questions of alpha 4, the 4 of the tabs, and
+/// alpha 5's 36: batch rename's 17, compare and synchronize's 6,
+/// duplicates' 7 and the lists' 6.
+const PURPOSES: usize = 152;
 
 /// The purposes whose scenario may say "not made on this system", each
 /// for its reason: a symbolic link needs Developer Mode on Windows; the
@@ -85,13 +89,54 @@ fn purpose_names() -> BTreeSet<String> {
             .collect()
     };
     let mut names: BTreeSet<String> = BTreeSet::new();
-    for name in arms("app.rs", "impl Purpose {").into_iter().chain(arms(
-        "app/organize.rs",
-        "fn purpose(&self) -> &'static str {",
-    )) {
+    let mut found = arms("app.rs", "impl Purpose {");
+    // The hosted lists' names: alpha 4's in `organize.rs`, and alpha 5's
+    // in each app lane's own file, hosted under `Wants` there.
+    for file in HOSTED_FILES {
+        found.extend(arms(file, "fn purpose(&self) -> &'static str {"));
+    }
+    for name in found {
         assert!(names.insert(name.clone()), "{name} twice");
     }
     names
+}
+
+/// The app's files whose `purpose` function names hosted dialogs: alpha
+/// 4's under `Organize`, and alpha 5's batch rename (RA), compare and
+/// synchronize (SA), duplicates (DA) and lists (LA). A lane that hosts
+/// dialogs in a new file adds it here, or its purposes go unopened.
+const HOSTED_FILES: [&str; 5] = [
+    "app/organize.rs",
+    "app/renaming.rs",
+    "app/syncing.rs",
+    "app/duplicates.rs",
+    "app/collections.rs",
+];
+
+#[test]
+fn every_purpose_function_in_the_app_is_read() {
+    // Any `fn purpose(&self) -> &'static str` in the app's source is in
+    // HOSTED_FILES, so a later lane's hosted dialogs cannot be missed.
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../diroxide-app/src");
+    let mut stack = vec![src.clone()];
+    let mut holders = BTreeSet::new();
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                if text.contains("fn purpose(&self) -> &'static str {") {
+                    let rel = path.strip_prefix(&src).unwrap();
+                    let rel = rel.to_string_lossy().replace('\\', "/");
+                    holders.insert(rel);
+                }
+            }
+        }
+    }
+    let listed: BTreeSet<String> = HOSTED_FILES.iter().map(|f| (*f).to_owned()).collect();
+    assert_eq!(holders, listed);
 }
 
 /// The variants of `Purpose` as `app.rs` declares them.
@@ -266,9 +311,14 @@ fn mark(rig: &mut Rig, names: &[&str]) {
     rig.refresh();
 }
 
-/// Chooses the open dialog's row with `id`, as Enter on it does.
+/// Chooses the open dialog's row with `id`, as Enter on it does. With no
+/// dialog open it does nothing, so the scenario's check names the
+/// purpose that did not open rather than stopping its whole part.
 fn answer(rig: &mut Rig, id: &str) {
-    let (dialog, _) = rig.f.app().dialog().unwrap();
+    let Some((dialog, _)) = rig.f.app().dialog() else {
+        eprintln!("no dialog to answer {id}; said {:?}", rig.spoken().last());
+        return;
+    };
     let now = rig.now;
     rig.f.event(
         &mut HostOf(&mut rig.h),
@@ -334,7 +384,370 @@ type Open = fn(&Path) -> Option<Rig>;
 fn scenarios() -> Vec<(&'static str, &'static str, Open)> {
     let mut all = first_scenarios();
     all.extend(hosted_scenarios());
+    all.extend(rename_scenarios());
+    all.extend(sync_scenarios());
+    all.extend(dups_scenarios());
+    all.extend(lists_scenarios());
     all
+}
+
+/// The window over `work` whose launcher starts nothing: the editor door
+/// of batch rename plans its editor and the double drops it, so no test
+/// starts a program.
+fn window_no_start(root: &Path) -> Rig {
+    use diroxide_gui::spawn::{Planned, WindowLauncher};
+    let work = world(root);
+    let (app, runtime) = app_with(&work, &work.join("Backup"), |_| {});
+    let paths = Paths::new(root.join("config"), root.join("state"));
+    let launcher = WindowLauncher::with_starter(Box::new(|_: &Planned| Ok(())));
+    let runtime = runtime
+        .with_paths(paths)
+        .with_components_offline()
+        .with_launcher(Arc::new(launcher));
+    Rig::new(app, runtime)
+}
+
+/// Batch rename's rules list over two marked files (lane RA).
+fn rename_rules(root: &Path) -> Rig {
+    let mut rig = window_no_start(root);
+    mark(&mut rig, &["a.txt", "b.txt"]);
+    rig.run("rename.batch");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenameRules"));
+    rig
+}
+
+/// The same, with one rule added: Replace "a" with "c".
+fn rename_with_rule(root: &Path) -> Rig {
+    let mut rig = rename_rules(root);
+    answer(&mut rig, "add");
+    answer(&mut rig, "replace");
+    rig.type_text("a");
+    rig.press("enter");
+    rig.type_text("c");
+    rig.press("enter");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenameRules"));
+    rig
+}
+
+/// Batch rename (alpha 5, lane RA): the rules list, its prompts and
+/// lists, the preview and a row's actions, the question before the run,
+/// the editor door's question and the presets.
+fn rename_scenarios() -> Vec<(&'static str, &'static str, Open)> {
+    vec![
+        ("RenameRules", "", |root| Some(rename_rules(root))),
+        ("RenameKinds", "", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "add");
+            Some(rig)
+        }),
+        ("RenameRuleField", "", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "add");
+            answer(&mut rig, "replace");
+            Some(rig)
+        }),
+        ("RenamePlaceholders", "", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "add");
+            answer(&mut rig, "template");
+            Some(rig)
+        }),
+        ("RenameCases", "", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "add");
+            answer(&mut rig, "case");
+            Some(rig)
+        }),
+        ("RenameTidies", "", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "add");
+            answer(&mut rig, "tidy");
+            Some(rig)
+        }),
+        ("RenameRuleActions", "", |root| {
+            let mut rig = rename_with_rule(root);
+            answer(&mut rig, "rule-0");
+            Some(rig)
+        }),
+        ("RenameCounter", "", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "counter");
+            Some(rig)
+        }),
+        ("RenamePreview", "", |root| {
+            let mut rig = rename_with_rule(root);
+            answer(&mut rig, "count");
+            Some(rig)
+        }),
+        ("RenameRow", "", |root| {
+            let mut rig = rename_with_rule(root);
+            answer(&mut rig, "count");
+            answer(&mut rig, "0");
+            Some(rig)
+        }),
+        ("RenameRowName", "", |root| {
+            let mut rig = rename_with_rule(root);
+            answer(&mut rig, "count");
+            answer(&mut rig, "0");
+            answer(&mut rig, "edit");
+            Some(rig)
+        }),
+        ("RenameConfirm", "", |root| {
+            let mut rig = rename_with_rule(root);
+            answer(&mut rig, "apply");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenameConfirm"));
+            Some(rig)
+        }),
+        ("RenameEditorDone", "Done editing", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "editor");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenameEditorDone"));
+            Some(rig)
+        }),
+        ("RenamePresets", "", |root| {
+            let mut rig = rename_rules(root);
+            answer(&mut rig, "presets");
+            Some(rig)
+        }),
+        ("RenamePresetName", "", |root| {
+            // A preset needs a rule to save.
+            let mut rig = rename_with_rule(root);
+            answer(&mut rig, "presets");
+            answer(&mut rig, "save");
+            Some(rig)
+        }),
+        ("RenamePresetActions", "", |root| {
+            let mut rig = rename_preset_saved(root);
+            answer(&mut rig, "preset-0");
+            Some(rig)
+        }),
+        ("RenameDeletePreset", "", |root| {
+            let mut rig = rename_preset_saved(root);
+            answer(&mut rig, "preset-0");
+            answer(&mut rig, "delete");
+            Some(rig)
+        }),
+    ]
+}
+
+/// The presets list with one preset, Trip, saved in the config folder.
+fn rename_preset_saved(root: &Path) -> Rig {
+    let mut rig = rename_with_rule(root);
+    answer(&mut rig, "presets");
+    answer(&mut rig, "save");
+    rig.type_text("Trip");
+    rig.press("enter");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenameRules"));
+    rig.run("rename.presets");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenamePresets"));
+    rig
+}
+
+/// Compare folders' result: work here and Backup there, by size and
+/// time (lane SA).
+fn sync_result(root: &Path) -> Rig {
+    let mut rig = sync_window(root);
+    rig.run("compare.folders");
+    answer(&mut rig, "by-time");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("SyncResult"));
+    rig
+}
+
+/// A window over `work` (here) and `copies` (there), a folder beside it
+/// with a smaller report.pdf and a file only there: compare refuses a
+/// folder inside the other, as Backup is inside `work`.
+fn sync_window(root: &Path) -> Rig {
+    let work = world(root);
+    let there = root.join("copies");
+    std::fs::create_dir_all(&there).unwrap();
+    std::fs::write(there.join("report.pdf"), b"old").unwrap();
+    std::fs::write(there.join("old.txt"), b"only there").unwrap();
+    let (app, runtime) = app_with(&work, &there, |_| {});
+    let paths = Paths::new(root.join("config"), root.join("state"));
+    Rig::new(app, runtime.with_paths(paths).with_components_offline())
+}
+
+/// The synchronize plan: Update the other panel.
+fn sync_plan(root: &Path) -> Rig {
+    let mut rig = sync_result(root);
+    answer(&mut rig, "a:sync");
+    answer(&mut rig, "m:UpdateThere");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("SyncPlan"));
+    rig
+}
+
+/// Compare folders and synchronize (alpha 5, lane SA).
+fn sync_scenarios() -> Vec<(&'static str, &'static str, Open)> {
+    vec![
+        ("SyncCriteria", "Compare folders", |root| {
+            let mut rig = sync_window(root);
+            rig.run("compare.folders");
+            Some(rig)
+        }),
+        ("SyncResult", "", |root| Some(sync_result(root))),
+        ("SyncModes", "Synchronize how", |root| {
+            let mut rig = sync_result(root);
+            answer(&mut rig, "a:sync");
+            Some(rig)
+        }),
+        ("SyncPlan", "", |root| Some(sync_plan(root))),
+        ("SyncRowActions", "", |root| {
+            let mut rig = sync_plan(root);
+            choose(&mut rig, "Copy there: ");
+            Some(rig)
+        }),
+        ("SyncConfirm", "Synchronize ", |root| {
+            let mut rig = sync_plan(root);
+            answer(&mut rig, "a:run");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("SyncConfirm"));
+            Some(rig)
+        }),
+    ]
+}
+
+/// A window over `work` with two copies of one file, one in Photos.
+fn dups_window(root: &Path, change: impl FnOnce(&mut AppOptions)) -> Rig {
+    let work = root.join("work");
+    std::fs::create_dir_all(work.join("Photos")).unwrap();
+    std::fs::write(work.join("copy-one.txt"), b"the same words").unwrap();
+    std::fs::write(work.join("Photos").join("copy-two.txt"), b"the same words").unwrap();
+    window(root, change)
+}
+
+/// The duplicates' groups, found in this folder (lane DA).
+fn dups_groups(root: &Path) -> Rig {
+    let mut rig = dups_window(root, |_| {});
+    rig.run("dups.find");
+    rig.press("enter");
+    choose(&mut rig, "Find now");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("DupsGroups"));
+    rig
+}
+
+/// Duplicates (alpha 5, lane DA): where, the options, the large read's
+/// question, the groups, a group's copies, the keep rules, the trash.
+fn dups_scenarios() -> Vec<(&'static str, &'static str, Open)> {
+    vec![
+        ("DupsScope", "Find duplicates where", |root| {
+            let mut rig = dups_window(root, |_| {});
+            rig.run("dups.find");
+            Some(rig)
+        }),
+        ("DupsOptions", "Find duplicates options", |root| {
+            let mut rig = dups_window(root, |_| {});
+            rig.run("dups.find");
+            rig.press("enter");
+            Some(rig)
+        }),
+        ("DupsEstimate", "Read ", |root| {
+            // Two files past the quick check go to the full hash, and
+            // asking above 0 GB asks before any read.
+            let work = root.join("work");
+            std::fs::create_dir_all(&work).unwrap();
+            let big = vec![7u8; 200_000];
+            std::fs::write(work.join("one.bin"), &big).unwrap();
+            std::fs::write(work.join("two.bin"), &big).unwrap();
+            let mut rig = window(root, |options| {
+                options.settings.duplicates.ask_above_gb = 0;
+            });
+            rig.run("dups.find");
+            rig.press("enter");
+            choose(&mut rig, "Find now");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("DupsEstimate"));
+            Some(rig)
+        }),
+        ("DupsGroups", "", |root| Some(dups_groups(root))),
+        ("DupsMembers", "", |root| {
+            let mut rig = dups_groups(root);
+            choose(&mut rig, "Group 1");
+            Some(rig)
+        }),
+        ("DupsRules", "Choose copies to keep", |root| {
+            let mut rig = dups_groups(root);
+            rig.run("dups.keep");
+            Some(rig)
+        }),
+        ("DupsTrash", "Trash 1 copy", |root| {
+            let mut rig = dups_groups(root);
+            rig.run("dups.keep");
+            rig.press("enter");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("DupsGroups"));
+            choose(&mut rig, "Trash the marked");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("DupsTrash"));
+            Some(rig)
+        }),
+    ]
+}
+
+/// A collection, Trip, holding notes.txt (lane LA).
+fn lists_collection(root: &Path) -> Rig {
+    let mut rig = window(root, |_| {});
+    focus(&mut rig, "notes.txt");
+    rig.run("file.save-as-collection");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("CollectionName"));
+    rig.type_text("Trip");
+    rig.press("enter");
+    rig.settle_until(|rig| rig.f.app().dialog().is_none());
+    rig
+}
+
+/// Lists that are not folders (alpha 5, lane LA): collections and their
+/// name prompts, the removal question, the flat view's settings.
+fn lists_scenarios() -> Vec<(&'static str, &'static str, Open)> {
+    vec![
+        ("CollectionName", "Collection name", |root| {
+            let mut rig = window(root, |_| {});
+            focus(&mut rig, "notes.txt");
+            rig.run("file.save-as-collection");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        ("Collections", "Collections", |root| {
+            let mut rig = lists_collection(root);
+            rig.run("go.collections");
+            wait(&mut rig);
+            Some(rig)
+        }),
+        ("CollectionRename", "New name for Trip", |root| {
+            let mut rig = lists_collection(root);
+            rig.run("go.collections");
+            wait(&mut rig);
+            choose(&mut rig, "Rename a collection");
+            rig.settle_until(|rig| {
+                rig.dialog_name()
+                    .is_some_and(|n| n.starts_with("Rename which"))
+            });
+            rig.press("home");
+            rig.press("enter");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("CollectionRename"));
+            Some(rig)
+        }),
+        ("CollectionRemove", "Remove collection Trip", |root| {
+            let mut rig = lists_collection(root);
+            rig.run("go.collections");
+            wait(&mut rig);
+            choose(&mut rig, "Remove a collection");
+            rig.settle_until(|rig| {
+                rig.dialog_name()
+                    .is_some_and(|n| n.starts_with("Remove which"))
+            });
+            rig.press("home");
+            rig.press("enter");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("CollectionRemove"));
+            Some(rig)
+        }),
+        ("FlatView", "Flat view of work", |root| {
+            let mut rig = window(root, |_| {});
+            rig.run("view.flat");
+            Some(rig)
+        }),
+        ("FlatViewDepth", "Depth", |root| {
+            let mut rig = window(root, |_| {});
+            rig.run("view.flat");
+            answer(&mut rig, "depth");
+            Some(rig)
+        }),
+    ]
 }
 
 /// The purposes of alpha 3 and before: the variants of `Purpose`.
@@ -1560,16 +1973,22 @@ fn every_purpose_is_opened_or_said_why_not() {
 /// The new lists of alpha 4 as a screen reader's tree walk finds them,
 /// held against golden files (R30's commit 114): the details list, the
 /// Convert recipes, Verify checksum's report, the Watched folders list
-/// and Open with. Each opens as its purpose's scenario does, on a clock
+/// and Open with; and alpha 5's batch rename preview, synchronize plan
+/// and duplicates' groups. Each opens as its purpose's scenario does, on a clock
 /// and file times fixed so the words are the same on every run.
 #[test]
 fn the_new_lists_dump_to_their_goldens() {
-    let goldens: [(&str, &str); 5] = [
+    let goldens: [(&str, &str); 8] = [
         ("Details", "details-list"),
         ("ConvertRecipes", "convert-recipes"),
         ("VerifyReport", "verify-report"),
         ("WatchedFolders", "watched-folders"),
         ("OpenWith", "open-with"),
+        // Alpha 5's lists (R34's commit 33): batch rename's preview, the
+        // synchronize plan and the duplicates' groups.
+        ("RenamePreview", "rename-preview"),
+        ("SyncPlan", "sync-plan"),
+        ("DupsGroups", "dups-groups"),
     ];
     let scenarios = scenarios();
     for (purpose, golden) in goldens {
@@ -1610,6 +2029,83 @@ fn fixed_details(root: &Path) -> Rig {
     rig.run("file.details");
     wait(&mut rig);
     rig
+}
+
+/// Alpha 5's lists of places that are not a folder, in the general
+/// results lister (P5's `ListKind`): the flat view, a collection, a
+/// compare's differences, a duplicate group's copies, and the list of
+/// places `diro -` opens. Each opens through the window as the Results
+/// purpose with a name and the focus on a named row. Recent files is not
+/// opened here: a file is kept only when Enter or F4 opens it, which
+/// starts a program.
+#[test]
+fn the_lists_of_alpha_5_open_in_the_lister_with_a_name_and_a_focus() {
+    type Make = fn(&Path) -> Rig;
+    let lists: [(&str, &str, Make); 5] = [
+        ("flat view", "Flat view", |root| {
+            let mut rig = window(root, |_| {});
+            rig.run("view.flat");
+            answer(&mut rig, "start");
+            rig
+        }),
+        ("collection", "Trip", |root| {
+            let mut rig = lists_collection(root);
+            rig.run("go.collections");
+            wait(&mut rig);
+            rig.press("home");
+            rig.press("enter");
+            rig
+        }),
+        ("differences", "Differences", |root| {
+            let mut rig = sync_result(root);
+            answer(&mut rig, "a:list");
+            rig
+        }),
+        ("duplicate group", "Group 1 of 1", |root| {
+            let mut rig = dups_groups(root);
+            choose(&mut rig, "Group 1");
+            choose(&mut rig, "Show these");
+            rig
+        }),
+        ("standard input", "Standard input", |root| {
+            let mut rig = window(root, |_| {});
+            let work = root.join("work");
+            let places = ["notes.txt", "a.txt"]
+                .iter()
+                .map(|n| diroxide_core::Place::parse(work.join(n).to_str().unwrap()).unwrap())
+                .collect();
+            let effects = rig.f.app_mut().open_place_list(
+                "Standard input",
+                "2 paths from standard input",
+                places,
+            );
+            let now = rig.now;
+            rig.f.carry_effects(&mut HostOf(&mut rig.h), effects, now);
+            rig.settle();
+            rig
+        }),
+    ];
+    let mut failures = Vec::new();
+    for (what, start, make) in lists {
+        let root = tempfile::Builder::new()
+            .prefix("gui-it-lister-")
+            .tempdir()
+            .unwrap();
+        let mut rig = make(root.path());
+        rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("Results"));
+        match checked(&rig) {
+            Ok((name, role, control)) if name.starts_with(start) => {
+                eprintln!("{what}: {name} | {role:?} {control}");
+            }
+            Ok((name, _, _)) => failures.push(format!("{what}: named {name:?}, not {start:?}")),
+            Err(why) => failures.push(format!(
+                "{what}: {why}; purpose {:?}; last said {:?}",
+                rig.f.app().dialog_purpose(),
+                rig.spoken().last()
+            )),
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
 }
 
 /// The parts the purposes are opened in, each its own test.

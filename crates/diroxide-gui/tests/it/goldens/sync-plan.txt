@@ -1,0 +1,25 @@
+Window "work - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "work, 8 items, in <dir>" live=polite
+        Label "Comparing work here with copies there" live=polite
+      Dialog "Update the other panel: 1 problem, 9 to copy there, 1 skipped; 397 bytes to copy"
+        GenericContainer ""
+          Label "Enter on a row lists what can change on it. Synchronize now is after the rows; nothing changes before its question."
+        ListBox "Update the other panel: 1 problem, 9 to copy there, 1 skipped; 397 bytes to copy"
+          ListBoxOption "Choose a direction: report.pdf, larger here, same time" 1 of 15 FOCUS
+          ListBoxOption "Copy there: a.txt, only here" 2 of 15
+          ListBoxOption "Copy there: b.txt, only here" 3 of 15
+          ListBoxOption "Copy there: Backup, new folder" 4 of 15
+          ListBoxOption "Copy there: report.pdf, in Backup, only here" 5 of 15
+          ListBoxOption "Copy there: course.zip, only here" 6 of 15
+          ListBoxOption "Copy there: notes.md, only here" 7 of 15
+          ListBoxOption "Copy there: notes.txt, only here" 8 of 15
+          ListBoxOption "Copy there: Photos, new folder" 9 of 15
+          ListBoxOption "Copy there: crow.jpg, in Photos, only here" 10 of 15
+          ListBoxOption "Skip: old.txt, only there, kept" 11 of 15
+          ListBoxOption "Synchronize now: 9 items" 12 of 15
+          ListBoxOption "Mode: Update the other panel" 13 of 15
+          ListBoxOption "Compare again" 14 of 15
+          ListBoxOption "Compared by size and time; times within 2 seconds count as the same." 15 of 15
