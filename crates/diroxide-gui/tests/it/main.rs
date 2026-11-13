@@ -5,6 +5,8 @@
 #[cfg(feature = "gui")]
 mod choose;
 #[cfg(feature = "gui")]
+mod columns;
+#[cfg(feature = "gui")]
 mod completion;
 #[cfg(feature = "gui")]
 mod confirm;
@@ -53,6 +55,8 @@ mod quick_view;
 mod rig;
 #[cfg(feature = "gui")]
 mod secret;
+#[cfg(feature = "gui")]
+mod tabs;
 #[cfg(feature = "gui")]
 mod ten_minutes;
 #[cfg(feature = "gui")]

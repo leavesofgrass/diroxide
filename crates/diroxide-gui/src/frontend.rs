@@ -1679,6 +1679,15 @@ impl Frontend {
         self.refresh(host);
     }
 
+    /// Effects an app call returned outside a key or a command (`diro -`
+    /// opening its list of places after the start), carried as the
+    /// window carries its own, then the window refreshed.
+    pub fn carry_effects(&mut self, host: &mut impl Host, effects: Vec<Effect>, now: Instant) {
+        self.carry(effects);
+        self.after(now);
+        self.refresh(host);
+    }
+
     /// The job in front's percent, when one runs: none while it only
     /// waits its turn (held or queued), 0 before its first progress.
     fn front_percent(&self) -> Option<u64> {

@@ -177,9 +177,16 @@ impl PanelBox {
         if this.widget.view.header != view.header || this.widget.view.active != view.active {
             this.widget.header = None;
         }
+        // The list's own name and description (a tab's words, the
+        // columns) change no drawing, but the tree must say them.
+        let renamed =
+            this.widget.view.name != view.name || this.widget.view.columns != view.columns;
         this.widget.view = view;
         if relayout {
             this.ctx.request_layout();
+        }
+        if renamed {
+            this.ctx.request_accessibility_update();
         }
         this.ctx.request_render();
     }
@@ -495,6 +502,10 @@ impl Widget for PanelBox {
         node: &mut Node,
     ) {
         node.set_label(self.view.name.as_str());
+        // The columns as a header in words, said after the list's name.
+        if !self.view.columns.is_empty() {
+            node.set_description(self.view.columns.as_str());
+        }
         // The painting is clipped, but every option in the window is a
         // node with its own bounds, so the list does not claim to clip
         // them (textweaver's ADR-0028: options vanish from the tree
