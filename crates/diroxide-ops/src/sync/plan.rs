@@ -2,7 +2,8 @@
 //! row, that the owner reads and changes before anything is copied.
 //!
 //! Every row says its action first, in the short form: "Copy there:
-//! plan.md, only here"; "Will be removed there: old.txt, to the trash".
+//! plan.md, only here"; "Replace there: notes.txt, newer here"; "Trash
+//! there: old.txt, only there" (question 135's short words).
 //! Problems are said first and never acted on; a type that differs is
 //! skipped, never resolved; the removals come next, every one listed,
 //! to the trash where the place has one and "for good" where it has none.
@@ -502,8 +503,10 @@ impl SyncPlan {
     }
 
     /// One row in words, its action first, in the short form: "Copy
-    /// there: plan.md, only here"; "Will be removed there: old.txt, to the
-    /// trash"; "Type differs: photos, folder here, file there"; "Left
+    /// there: plan.md, only here"; "Replace there: notes.txt, newer
+    /// here"; "Trash there: old.txt, only there"; "Delete for good there:
+    /// old.txt, no trash there"; "Type differs: photos, folder here, file
+    /// there"; "Left
     /// out: report.pdf, would copy there".
     pub fn line(&self, index: usize) -> String {
         let (Some(row), Some(status)) = (self.rows.get(index), self.status(index)) else {
@@ -551,9 +554,27 @@ impl SyncPlan {
                 format!("Skip: {place}, {why}")
             }
             RowStatus::Acts | RowStatus::Caution => match row.action {
+                // A file there already: the short words of question 135,
+                // "Replace there: notes.txt, newer here" (lane AS).
+                SyncAction::CopyTo(to) if row.row.entry(to).is_some() && !row.row.is_folder() => {
+                    let mut head = if row.row.newer() == Some(to) {
+                        "Replace newer".to_owned()
+                    } else {
+                        "Replace".to_owned()
+                    };
+                    if !self.facts(to).trash {
+                        head.push_str(" for good");
+                    }
+                    let mut parts = vec![format!("{head} {}: {place}", at(to))];
+                    parts.extend(reasons);
+                    if !self.facts(to).trash {
+                        parts.push(format!("no trash {}", at(to)));
+                    }
+                    parts.join(", ")
+                }
                 SyncAction::CopyTo(to) => {
                     let from = to.other();
-                    let mut parts: Vec<String> = match row.row.state {
+                    let parts: Vec<String> = match row.row.state {
                         RowState::OnlyLeft | RowState::OnlyRight if row.row.is_folder() => {
                             vec!["new folder".to_owned()]
                         }
@@ -567,21 +588,15 @@ impl SyncPlan {
                         }
                         _ => reasons,
                     };
-                    if row.row.entry(to).is_some() && !row.row.is_folder() {
-                        parts.push(if self.facts(to).trash {
-                            "old one to the trash".to_owned()
-                        } else {
-                            "replaces for good, no trash there".to_owned()
-                        });
-                    }
                     with(format!("Copy {}: {place}", at(to)), &parts)
                 }
                 SyncAction::RemoveFrom(from) if self.facts(from).trash => {
-                    format!("Will be removed {}: {place}, to the trash", at(from))
+                    format!("Trash {}: {place}, only {}", at(from), at(from))
                 }
                 SyncAction::RemoveFrom(from) => {
                     format!(
-                        "Will be removed {} for good: {place}, no trash there",
+                        "Delete for good {}: {place}, no trash {}",
+                        at(from),
                         at(from)
                     )
                 }

@@ -368,49 +368,9 @@ fn mode_of(id: &str) -> Option<SyncMode> {
 /// "Delete for good there: old.txt, no trash there". The engine's own
 /// line for the rest: "Skip: thing, newer there", "Type differs: photos,
 /// folder here, file there", "Left out: report.pdf, would copy there".
+/// The engine says them all now, as `diro sync` prints them (lane AS).
 pub(super) fn plan_line(plan: &SyncPlan, index: usize) -> String {
-    let (Some(row), Some(status)) = (plan.rows.get(index), plan.status(index)) else {
-        return String::new();
-    };
-    if !matches!(status, RowStatus::Acts | RowStatus::Caution) {
-        return plan.line(index);
-    }
-    let separator = if plan.left.local_path().is_some_and(|p| !p.starts_with('/')) {
-        '\\'
-    } else {
-        '/'
-    };
-    let place = row.row.where_words(separator);
-    match row.action {
-        SyncAction::RemoveFrom(side) if plan.facts(side).trash => {
-            format!("Trash {}: {place}, only {}", at(side), at(side))
-        }
-        SyncAction::RemoveFrom(side) => {
-            format!(
-                "Delete for good {}: {place}, no trash {}",
-                at(side),
-                at(side)
-            )
-        }
-        SyncAction::CopyTo(to) if row.row.entry(to).is_some() && !row.row.is_folder() => {
-            let newer = row.row.newer() == Some(to);
-            let mut head = if newer {
-                "Replace newer".to_owned()
-            } else {
-                "Replace".to_owned()
-            };
-            if !plan.facts(to).trash {
-                head.push_str(" for good");
-            }
-            let mut parts = vec![format!("{head} {}: {place}", at(to))];
-            parts.extend(row.row.reasons());
-            if !plan.facts(to).trash {
-                parts.push(format!("no trash {}", at(to)));
-            }
-            parts.join(", ")
-        }
-        _ => plan.line(index),
-    }
+    plan.line(index)
 }
 
 /// The plan view: the rows in the listing's order, then the actions,

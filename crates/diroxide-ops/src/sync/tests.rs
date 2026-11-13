@@ -544,11 +544,9 @@ fn update_copies_missing_and_newer_and_says_problems_first() {
         "Choose a direction: differs.txt, larger there, same time"
     );
     cells(&lines[3], "Choose a direction: differs.txt", 56);
-    assert_eq!(
-        lines[4],
-        "Copy there: newer.txt, newer here, old one to the trash"
-    );
-    cells(&lines[4], "Copy there: newer.txt, newer here", 55);
+    // Question 135's short words (lane AS).
+    assert_eq!(lines[4], "Replace there: newer.txt, newer here");
+    cells(&lines[4], "Replace there: newer.txt, newer here", 36);
     assert_eq!(lines[5], "Copy there: only.txt, only here");
     cells(&lines[5], "Copy there: only.txt, only here", 31);
     assert_eq!(lines[6], "Copy there: sub, new folder");
@@ -580,10 +578,7 @@ fn both_ways_copies_each_way_and_never_removes() {
         "Both ways, newer wins: 2 problems, 4 to copy there, 2 to copy here, 1 same; 9 bytes to copy"
     );
     let older = index_of(&plan, "older.txt");
-    assert_eq!(
-        plan.line(older),
-        "Copy here: older.txt, newer there, old one to the trash"
-    );
+    assert_eq!(plan.line(older), "Replace here: older.txt, newer there");
     // Equal times with different sizes are never a guess.
     let differs = index_of(&plan, "differs.txt");
     assert_eq!(
@@ -601,26 +596,15 @@ fn a_mirror_lists_every_removal_first_and_trashes_a_folder_in_one_step() {
     plan_adds_up(&plan);
     let lines = plan.lines(false);
     assert_eq!(lines[2], "Type differs: clash, file here, folder there");
-    assert_eq!(lines[3], "Will be removed there: gone.txt, to the trash");
-    cells(&lines[3], "Will be removed there: gone.txt", 45);
-    assert_eq!(lines[4], "Will be removed there: old, to the trash");
-    assert_eq!(
-        lines[5],
-        "Will be removed there: a.txt, in old, to the trash"
-    );
-    assert_eq!(
-        lines[6],
-        "Will be removed there: b.txt, in old, to the trash"
-    );
+    assert_eq!(lines[3], "Trash there: gone.txt, only there");
+    cells(&lines[3], "Trash there: gone.txt, only there", 33);
+    assert_eq!(lines[4], "Trash there: old, only there");
+    assert_eq!(lines[5], "Trash there: a.txt, in old, only there");
+    assert_eq!(lines[6], "Trash there: b.txt, in old, only there");
     // Then what replaces a newer file, before the plain copies.
-    assert_eq!(
-        lines[7],
-        "Copy there: older.txt, replaces a newer file there, old one to the trash"
-    );
-    cells(&lines[7], "Copy there: older.txt, replaces a", 72);
-    assert!(lines.contains(
-        &"Copy there: differs.txt, larger there, same time, old one to the trash".to_owned()
-    ));
+    assert_eq!(lines[7], "Replace newer there: older.txt, newer there");
+    cells(&lines[7], "Replace newer there: older.txt", 43);
+    assert!(lines.contains(&"Replace there: differs.txt, larger there, same time".to_owned()));
     assert_eq!(
         plan.summary(),
         "Mirror to the other panel: 1 problem, 4 to remove there, 6 to copy there, 1 same; 11 bytes to copy"
@@ -646,9 +630,9 @@ fn without_a_trash_removals_are_for_good_deepest_first_and_said() {
     let notes = plan.notes();
     assert_eq!(notes[0], "6 changes cannot be undone: no trash there.");
     cells(&notes[0], "6 changes cannot be undone", 43);
-    let line = "Will be removed there for good: a.txt, in old, no trash there";
+    let line = "Delete for good there: a.txt, in old, no trash there";
     assert!(plan.lines(false).contains(&line.to_owned()));
-    cells(line, "Will be removed there for good: a.txt", 61);
+    cells(line, "Delete for good there: a.txt, in old", 52);
     let removes: Vec<_> = plan
         .steps()
         .unwrap()
@@ -665,7 +649,7 @@ fn without_a_trash_removals_are_for_good_deepest_first_and_said() {
     let newer = index_of(&plan, "newer.txt");
     assert_eq!(
         plan.line(newer),
-        "Copy there: newer.txt, newer here, replaces for good, no trash there"
+        "Replace for good there: newer.txt, newer here, no trash there"
     );
     assert!(plan.summary().contains("3 to remove there for good"));
 }
@@ -706,11 +690,8 @@ fn a_direction_settles_a_row_that_differs() {
     let mut plan = plan_sync(&compare(&mixed()), SyncMode::UpdateThere);
     let differs = index_of(&plan, "differs.txt");
     let said = plan.set_direction(differs, Side::Left).unwrap();
-    assert_eq!(
-        said,
-        "Copy here: differs.txt, larger there, same time, old one to the trash"
-    );
-    cells(&said, "Copy here: differs.txt", 69);
+    assert_eq!(said, "Replace here: differs.txt, larger there, same time");
+    cells(&said, "Replace here: differs.txt", 50);
     assert!(plan.acts(differs));
     let only = index_of(&plan, "only.txt");
     let refused = plan.set_direction(only, Side::Left).unwrap_err();
