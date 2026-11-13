@@ -69,6 +69,17 @@ Each line of the output starts with the scenario and its median, then the budget
 - `convert-plan`: plan converting 100 Markdown files to plain text with carta's built-in recipe, without running it: the plan `diro convert --dry-run` says.
 - `columns`: the app opening a folder of 100,000 empty files with three content columns (`text.lines`, `audio.artist`, `image.dimensions`), from its start until it is idle: the listing, the rows with their "reading" cells, and the cells read near the focus.
 
+The alpha 5 scenarios (R34's commit 41, in `xtask/src/bench/alpha5.rs`):
+
+- `rename-preview`: the batch rename's preview of 10,000 files named like `IMG_00001.JPG`, with two rules (replace `IMG_` with `trip-`, the extension in small letters), and ten of the new names already taken: the folder's facts read, the plan made, its count line and every row's line in the problems-first order, as the app's preview opens. The second line gives the plan alone, which the app makes again after every change, and the count line.
+- `compare-trees`: Compare folders on two trees of 100,000 files in 100 folders, by size and time: one file in a hundred only on the left, one in a hundred one byte longer on the right, one in two hundred only on the right, every file with the same time. Each run checks the three counts. The second line gives the synchronize plan that follows ("update the other panel") and the count line.
+- `flat-view`: the flat view of the compare's left tree, 100,000 files below 100 folders, with a panel's options, through the search engine, then made into the lister's rows.
+- `duplicates`: Find duplicates over 10,000 files in ten folders (about 230 MB), through the app itself with its BLAKE3, timed from Enter on "Find now" until the groups open: 1,000 groups of two, one group in fifty of 256 KiB files past the quick check. The second line gives the count line the app said first.
+- `tab-switch`: the left panel's first tab on the listing's folder of 100,000 entries and its second on an empty folder; Previous tab, timed until the app is idle, which lists the shown tab's folder again. The second line gives how soon the switch itself came back.
+- `plugin-column`: the Lua gate's number (R34's commit 44, question 128): one `column/format` request of 1,000 rows to a running process plugin, from the ask to the answer. The plugin is the tree's own `diroxide-fake-plugin` in its `echo` mode, a correct process plugin built from the tree by the bench (`cargo build -p diroxide-plugins --features fake-plugin`), which answers every place but the last. The second line gives the cold start (the process, the handshake and the first request) and the app's own way, through the host's column call in batches of at most 500 (`MAX_COLUMN_BATCH`).
+
+The duplicates and the tab switch go through the app, since the duplicate search's hash is the metadata crate's BLAKE3, which xtask reaches only through the app, and tabs live there. The others call their engines directly: the rename plan and the compare in the ops crate, the flat view in the search crate.
+
 The search scenarios call the search engine directly, since xtask may depend on the search crate (W3s's request 2); each checks that it found exactly the tree's hits. The four alpha 4 scenarios go through the app and the job engine, which xtask may depend on, and so measure the program's own code.
 
 ## The GUI's budgets
@@ -84,7 +95,7 @@ Where there is no display (Linux with neither `WAYLAND_DISPLAY` nor `DISPLAY`), 
 
 The archive scenarios call the archive provider and its runners directly, since xtask may depend on the archive crate (P2b, W2g's request 1); before that they ran the `diro` binary, so the first figures below include starting `diro` and writing every path, and the next baseline is the one to compare with.
 
-The sizes and budgets are in `bench/params.toml`; `--quick` uses its small sizes. The new scenarios have no budgets yet: they report, and the ratchet compares them with the baseline once one is saved.
+The sizes and budgets are in `bench/params.toml`; `--quick` uses its small sizes. A later scenario's budget is written by its id under `[budgets_ms.windows]` or `[budgets_ms.other]`; a scenario with none reports, and the ratchet compares it with the baseline once one is saved.
 
 ## Where the numbers go
 

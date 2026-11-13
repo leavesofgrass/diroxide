@@ -71,6 +71,16 @@ details_files = 1000
 checksum_bytes = 1000000000
 convert_files = 100
 column_entries = 100000
+# The alpha 5 scenarios (R34's commit 41): the batch rename's preview of
+# 10,000 names; two trees of 100,000 files in 100 folders compared, the
+# left one also listed as a flat view; duplicates among 10,000 files; a
+# tab switch at list_entries; and one column/format request of 1,000
+# rows to a process plugin (commit 44, question 128).
+rename_files = 10000
+compare_files = 100000
+compare_folders = 100
+dup_files = 10000
+plugin_rows = 1000
 
 # The quick run (--quick), for tests and a first look: the same scenarios
 # on small trees.
@@ -90,3 +100,8 @@ details_files = 40
 checksum_bytes = 8000000
 convert_files = 10
 column_entries = 2000
+rename_files = 200
+compare_files = 2000
+compare_folders = 10
+dup_files = 200
+plugin_rows = 1000

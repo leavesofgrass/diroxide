@@ -24,6 +24,12 @@
 //! - `search-name` and `search-content`: search the 1 GB tree of
 //!   `bench/search-tree.toml` (its small form with `--quick`) by name and
 //!   by contents through the search engine (alpha.3, W3s).
+//! - `details`, `checksum`, `convert-plan`, `columns`: alpha 4's (R30's
+//!   commit 117).
+//! - `rename-preview`, `compare-trees`, `flat-view`, `duplicates`,
+//!   `tab-switch`: alpha 5's engines (R34's commit 41, `bench/alpha5.rs`).
+//! - `plugin-column`: one batched `column/format` request to a process
+//!   plugin, the Lua gate's number (R34's commit 44).
 //!
 //! The archive scenarios call the archive provider and its runners
 //! directly (P2b, W2g's request 1): the archives are packed by diroxide's
@@ -73,6 +79,8 @@ use diroxide_search::{FnSink, Scope, SearchControl, SearchHit, SearchQuery, quot
 use diroxide_vfs::{OpContext, Provider, Registry};
 use serde::{Deserialize, Serialize};
 
+mod alpha5;
+
 use crate::budgets::{self, Budget};
 use crate::machine::{self, Machine, Versions};
 use crate::sample;
@@ -111,6 +119,17 @@ pub struct Sizes {
     pub convert_files: usize,
     /// Entries listed with three content columns.
     pub column_entries: usize,
+    /// Files in the batch rename's preview (alpha 5, R34's commit 41).
+    pub rename_files: usize,
+    /// Files in each of the two compared trees, and in the flat view.
+    pub compare_files: usize,
+    /// Folders those files are spread over.
+    pub compare_folders: usize,
+    /// Files searched for duplicates.
+    pub dup_files: usize,
+    /// Rows in the one `column/format` request to a process plugin (R34's
+    /// commit 44).
+    pub plugin_rows: usize,
 }
 
 /// The starting budgets, in milliseconds.
@@ -133,6 +152,25 @@ pub struct Budgets {
     pub search_content_windows: u64,
     /// A content search of the search tree, elsewhere.
     pub search_content_other: u64,
+    /// Budgets of later scenarios on Windows, by their id (alpha 5, R34's
+    /// commit 42): `[budgets_ms.windows]`.
+    #[serde(default)]
+    pub windows: BTreeMap<String, u64>,
+    /// The same elsewhere: `[budgets_ms.other]`.
+    #[serde(default)]
+    pub other: BTreeMap<String, u64>,
+}
+
+impl Budgets {
+    /// A later scenario's budget on this platform, when one is written.
+    pub fn budget_for(&self, id: &str) -> Option<u64> {
+        let table = if cfg!(windows) {
+            &self.windows
+        } else {
+            &self.other
+        };
+        table.get(id).copied()
+    }
 }
 
 /// `bench/params.toml`.
@@ -257,7 +295,7 @@ pub struct Options {
 }
 
 /// The scenario ids, in the order they run.
-pub const SCENARIOS: [&str; 17] = [
+pub const SCENARIOS: [&str; 23] = [
     "list",
     "stat",
     "list-stat",
@@ -275,6 +313,12 @@ pub const SCENARIOS: [&str; 17] = [
     "checksum",
     "convert-plan",
     "columns",
+    "rename-preview",
+    "compare-trees",
+    "flat-view",
+    "duplicates",
+    "tab-switch",
+    "plugin-column",
 ];
 
 /// The archive listings: their id, the archive's name and its kind in
@@ -739,6 +783,29 @@ pub fn run_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
     }
     if wanted(setting, &["columns"]) {
         outcomes.push(columns_scenario(setting)?);
+    }
+    if wanted(setting, &["rename-preview"]) {
+        outcomes.push(alpha5::rename_scenario(setting)?);
+    }
+    if wanted(setting, &["compare-trees", "flat-view"]) {
+        // The flat view walks the compare's left tree: one tree written
+        // for both.
+        let trees = alpha5::compare_trees(setting)?;
+        if wanted(setting, &["compare-trees"]) {
+            outcomes.push(alpha5::compare_scenario(setting, &trees)?);
+        }
+        if wanted(setting, &["flat-view"]) {
+            outcomes.push(alpha5::flat_scenario(setting, &trees)?);
+        }
+    }
+    if wanted(setting, &["duplicates"]) {
+        outcomes.push(alpha5::duplicates_scenario(setting)?);
+    }
+    if wanted(setting, &["tab-switch"]) {
+        outcomes.push(alpha5::tab_switch_scenario(setting)?);
+    }
+    if wanted(setting, &["plugin-column"]) {
+        outcomes.push(alpha5::plugin_column_scenario(setting)?);
     }
     Ok(outcomes)
 }
@@ -1378,7 +1445,11 @@ pub fn describe(
             second.push(' ');
             second.extend(c.to_uppercase());
             second.push_str(chars.as_str());
-            second.push('.');
+            // A note that ends in a sentence of its own (a count line)
+            // keeps its one period.
+            if !second.ends_with('.') {
+                second.push('.');
+            }
         }
     }
     let mut lines = vec![first, second];
@@ -1648,6 +1719,14 @@ mod tests {
             "List 100,000 entries: 412 ms, within the 800 ms budget."
         );
         assert_eq!(lines[1], "Runs: 398 ms, 455 ms, 412 ms. Warm.");
+        let counted = Outcome {
+            note: "found; 2 groups.".to_owned(),
+            ..outcome.clone()
+        };
+        assert_eq!(
+            describe(&counted, None, 20).0[1],
+            "Runs: 398 ms, 455 ms, 412 ms. Found; 2 groups."
+        );
         assert!(diroxide_core::format::within_cells(
             &lines[0],
             "List 100,000 entries: 412 ms"
