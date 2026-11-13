@@ -723,6 +723,32 @@ impl DialogView {
         let line = display_name(line);
         !self.title.is_empty() && line.starts_with(self.title.as_str())
     }
+
+    /// The focused row of the dialog's list, its id and its name, when
+    /// the control is a list with a focus.
+    pub fn focused_row(&self) -> Option<(&str, &str)> {
+        let ControlView::List(list) = &self.control else {
+            return None;
+        };
+        let at = list.focus?.checked_sub(list.first)?;
+        list.rows
+            .get(at)
+            .map(|row| (row.id.as_str(), row.name.as_str()))
+    }
+
+    /// The focused row's new name when `self` is `before` with that row's
+    /// words changed in place (Space leaving a row out, a copy marked):
+    /// the same dialog, the same row focused, another name. No focus
+    /// event follows such a change, so the window says it once through
+    /// the live region.
+    pub fn renamed_from(&self, before: &Self) -> Option<&str> {
+        if self.id != before.id {
+            return None;
+        }
+        let (id, name) = self.focused_row()?;
+        let (was_id, was_name) = before.focused_row()?;
+        (id == was_id && name != was_name).then_some(name)
+    }
 }
 
 /// The rows a dialog's list shows at a time, for its window.

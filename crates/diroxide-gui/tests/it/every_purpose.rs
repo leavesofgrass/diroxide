@@ -1,10 +1,10 @@
 //! Every dialog purpose (R27's commit 25, R30's commit 114): the app's
-//! dialogs are 152 purposes drawn as seven shapes: the 77 variants of
+//! dialogs are 153 purposes drawn as seven shapes: the 77 variants of
 //! `Purpose` in `crates/diroxide-app/src/app.rs`, and the 35 lists and
 //! questions the alpha 4 lanes host under `Organize` and `RunArchive`,
 //! each with its own name (`Wants::purpose` in `app/organize.rs`), and
-//! since alpha 5 the tabs' 4 and the 36 dialogs the app lanes host in
-//! their own files ([`HOSTED_FILES`]), 152 in all. This
+//! since alpha 5 the tabs' 4 and the 37 dialogs the app lanes host in
+//! their own files ([`HOSTED_FILES`]), 153 in all. This
 //! test opens each one the app can open from a test through the window,
 //! checking that the dialog has a name and that the keyboard focus is on
 //! a named control inside it. The purposes it cannot open are listed
@@ -44,9 +44,10 @@ const UNREACHABLE: &[(&str, &str)] = &[];
 
 /// How many purposes the app declares: 77 variants of `Purpose`, the
 /// 35 hosted lists and questions of alpha 4, the 4 of the tabs, and
-/// alpha 5's 36: batch rename's 17, compare and synchronize's 6,
-/// duplicates' 7 and the lists' 6.
-const PURPOSES: usize = 152;
+/// alpha 5's 37: batch rename's 17, compare and synchronize's 6,
+/// duplicates' 7 and the lists' 7 (lane AS added FlatCopy, the
+/// keep-folders question).
+const PURPOSES: usize = 153;
 
 /// The purposes whose scenario may say "not made on this system", each
 /// for its reason: a symbolic link needs Developer Mode on Windows; the
@@ -691,8 +692,18 @@ fn lists_collection(root: &Path) -> Rig {
     rig
 }
 
-/// Lists that are not folders (alpha 5, lane LA): collections and their
-/// name prompts, the removal question, the flat view's settings.
+/// The flat view of `work` on, its list in the lister.
+fn flat_on(root: &Path) -> Rig {
+    let mut rig = window(root, |_| {});
+    rig.run("view.flat");
+    answer(&mut rig, "start");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("Results"));
+    rig
+}
+
+/// Lists that are not folders (alpha 5, lanes LA and AS): collections and
+/// their name prompts, the removal question, the flat view's settings
+/// and its keep-folders question.
 fn lists_scenarios() -> Vec<(&'static str, &'static str, Open)> {
     vec![
         ("CollectionName", "Collection name", |root| {
@@ -739,6 +750,13 @@ fn lists_scenarios() -> Vec<(&'static str, &'static str, Open)> {
         ("FlatView", "Flat view of work", |root| {
             let mut rig = window(root, |_| {});
             rig.run("view.flat");
+            Some(rig)
+        }),
+        // Copy out of a flat view asks first (lane AS).
+        ("FlatCopy", "Keep folders, or all in one folder?", |root| {
+            let mut rig = flat_on(root);
+            rig.press("f5");
+            rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("FlatCopy"));
             Some(rig)
         }),
         ("FlatViewDepth", "Depth", |root| {
@@ -2162,6 +2180,201 @@ fn a_changed_row_is_said_once() {
         .filter(|s| s.starts_with("Left out: a.txt"))
         .collect();
     assert_eq!(left.len(), 1, "{heard:?}");
+}
+
+/// Presses `key` and checks the row's new words are heard once: through
+/// the live region (`line`), or through the focus when the app reopens
+/// the list with the focus on the changed row (`row`), never both and
+/// never twice.
+/// The focused node's id, as a debug string (a new node is a focus
+/// event a screen reader follows).
+fn focus_id(rig: &Rig) -> String {
+    let state = rig.h.access_tree().state();
+    let focused = state.focus_in_tree();
+    format!("{:?}", focused.active_descendant().unwrap_or(focused).id())
+}
+
+fn heard_once(rig: &mut Rig, key: &str, line: &str, row: &str) {
+    let before = rig.spoken().len();
+    let shown = rig.f.app().dialog().map(|(id, _)| id);
+    let node = focus_id(rig);
+    rig.press(key);
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    let live = heard.iter().filter(|s| s.contains(line)).count();
+    let (_, focused) = rig.focus_node();
+    let reopened = rig.f.app().dialog().map(|(id, _)| id) != shown;
+    let moved = reopened || focus_id(rig) != node;
+    let by_focus = usize::from(moved && focused.starts_with(row));
+    assert_eq!(
+        live + by_focus,
+        1,
+        "{key}: heard {heard:?}, focus {focused:?}, reopened {reopened}"
+    );
+    assert!(
+        focused.starts_with(row),
+        "{key}: the focus is on {focused:?}"
+    );
+}
+
+/// Space, now that lane AS wired it, changes a row in place and the
+/// change is heard once (R34's commit 34): a copy in the duplicates'
+/// copies list, a row of the synchronize plan, a row of the rename
+/// preview, each twice so it goes and comes back.
+#[test]
+fn space_on_a_row_is_said_once() {
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-space-")
+        .tempdir()
+        .unwrap();
+    let mut rig = dups_groups(root.path());
+    choose(&mut rig, "Group 1");
+    rig.press("home");
+    rig.press("down");
+    heard_once(
+        &mut rig,
+        "space",
+        "Marked copy-two.txt",
+        "Marked: copy-two.txt",
+    );
+    heard_once(&mut rig, "space", "Kept copy-two.txt", "Kept: copy-two.txt");
+    // The last kept copy stays, said in words.
+    rig.press("home");
+    let before = rig.spoken().len();
+    rig.press("space");
+    rig.press("down");
+    rig.press("space");
+    assert!(
+        rig.spoken()[before..]
+            .iter()
+            .any(|s| s.contains("One copy must stay.")),
+        "{:?}",
+        rig.spoken()
+    );
+
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-space-")
+        .tempdir()
+        .unwrap();
+    let mut rig = sync_plan(root.path());
+    focus_dialog_row_starting(&mut rig, "Copy there: a.txt");
+    heard_once(
+        &mut rig,
+        "space",
+        "Left out: a.txt, would copy there",
+        "Left out: a.txt",
+    );
+    heard_once(&mut rig, "space", "Copy there: a.txt", "Copy there: a.txt");
+
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-space-")
+        .tempdir()
+        .unwrap();
+    let mut rig = rename_with_rule(root.path());
+    answer(&mut rig, "count");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenamePreview"));
+    rig.press("home");
+    heard_once(
+        &mut rig,
+        "space",
+        "Skipped by you: a.txt",
+        "Skipped by you: a.txt",
+    );
+    heard_once(
+        &mut rig,
+        "space",
+        "a.txt becomes c.txt",
+        "a.txt becomes c.txt",
+    );
+}
+
+/// Moves the open list's focus to the row whose name starts with
+/// `start`, by its keys, without choosing it.
+fn focus_dialog_row_starting(rig: &mut Rig, start: &str) {
+    let names: Vec<String> = rig
+        .dialog_walk()
+        .into_iter()
+        .filter(|(role, _)| *role == Role::ListBoxOption)
+        .map(|(_, name)| name)
+        .collect();
+    let at = names
+        .iter()
+        .position(|n| n.starts_with(start))
+        .unwrap_or_else(|| panic!("no row {start} in {names:?}"));
+    rig.press("home");
+    for _ in 0..at {
+        rig.press("down");
+    }
+}
+
+/// The synchronize plan when a folder changes (lane AS): "Result is old:
+/// folders changed" (30 cells) is said once and shown first, and
+/// Synchronize now refuses in words until Compare again.
+#[test]
+fn a_changed_folder_makes_the_plan_old_and_synchronize_now_refuses() {
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-stale-")
+        .tempdir()
+        .unwrap();
+    let mut rig = sync_plan(root.path());
+    let copies = root.path().join("copies");
+    let place = |path: &Path| diroxide_core::Place::parse(path.to_str().unwrap()).unwrap();
+    let before = rig.spoken().len();
+    let now = rig.now;
+    rig.f.event(
+        &mut HostOf(&mut rig.h),
+        AppEvent::Watched {
+            side: Side::Right,
+            place: place(&copies),
+            event: diroxide_vfs::WatchEvent::Changed(place(&copies.join("old.txt"))),
+        },
+        now,
+    );
+    rig.settle();
+    let stale = "Result is old: folders changed";
+    assert_eq!(stale.chars().count(), 30);
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    assert_eq!(
+        heard.iter().filter(|s| s.contains(stale)).count(),
+        1,
+        "{heard:?}"
+    );
+    assert_eq!(rig.f.app().dialog_purpose(), Some("SyncPlan"));
+    let rows: Vec<String> = rig
+        .dialog_walk()
+        .into_iter()
+        .filter(|(role, _)| *role == Role::ListBoxOption)
+        .map(|(_, name)| name)
+        .collect();
+    assert_eq!(rows[0], stale, "{rows:?}");
+    let before = rig.spoken().len();
+    answer(&mut rig, "a:run");
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    assert!(
+        heard
+            .iter()
+            .any(|s| s.contains("Result is old: folders changed. Compare again first.")),
+        "{heard:?}"
+    );
+    assert_eq!(rig.f.app().dialog_purpose(), Some("SyncPlan"));
+}
+
+/// The palette opens over a results list in the window too (lane AS's
+/// item 1), and when it closes the focus is back on the list's row.
+#[test]
+fn the_palette_opens_over_a_results_list_and_gives_the_focus_back() {
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-palette-")
+        .tempdir()
+        .unwrap();
+    let mut rig = flat_on(root.path());
+    let (role, row) = rig.focus_node();
+    assert_eq!(role, Role::ListBoxOption);
+    rig.press("ctrl+shift+p");
+    assert_eq!(rig.f.app().dialog_purpose(), Some("Palette"));
+    assert_eq!(rig.focus_key().0, Role::EditableComboBox);
+    rig.press("escape");
+    assert_eq!(rig.f.app().dialog_purpose(), Some("Results"));
+    assert_eq!(rig.focus_node(), (Role::ListBoxOption, row));
 }
 
 /// The parts the purposes are opened in, each its own test.

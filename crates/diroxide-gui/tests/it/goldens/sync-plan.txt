@@ -3,11 +3,12 @@ Window "work - diroxide"
     GenericContainer ""
       GenericContainer ""
         Label "work, 8 items, in <dir>" live=polite
-        Label "Comparing work here with copies there" live=polite
-      Dialog "Update the other panel: 1 problem, 9 to copy there, 1 skipped; 397 bytes to copy"
+        Label "Comparing work here with copies there." live=polite
+        Label "Update the other panel: 1 problem, 9 to copy there, 1 skipped; 397 bytes to copy" live=polite
+      Dialog "Update the other panel: 9 changes"
         GenericContainer ""
           Label "Enter on a row lists what can change on it. Synchronize now is after the rows; nothing changes before its question."
-        ListBox "Update the other panel: 1 problem, 9 to copy there, 1 skipped; 397 bytes to copy"
+        ListBox "Update the other panel: 9 changes"
           ListBoxOption "Choose a direction: report.pdf, larger here, same time" 1 of 15 FOCUS
           ListBoxOption "Copy there: a.txt, only here" 2 of 15
           ListBoxOption "Copy there: b.txt, only here" 3 of 15

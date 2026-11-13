@@ -111,13 +111,26 @@ impl ChoiceBox {
     }
 
     /// Shows the list as the app has it now; another list (another name)
-    /// starts its node ids again.
+    /// starts its node ids again. A list whose name changes with its
+    /// count while the same row keeps the focus ("Update the other panel:
+    /// 9 changes" becoming "8 changes" as a row is left out) is the same
+    /// list: its nodes stay, so no focus event repeats the changed row
+    /// the live region says.
     pub fn set_view(this: &mut WidgetMut<'_, Self>, view: ListView) {
         if this.widget.view == view {
             return;
         }
         if this.widget.view.name != view.name {
-            this.widget.ids.clear();
+            let focused = |v: &ListView| {
+                v.focus
+                    .and_then(|at| at.checked_sub(v.first))
+                    .and_then(|at| v.rows.get(at))
+                    .map(|row| row.id.clone())
+            };
+            let same_row = focused(&this.widget.view).is_some_and(|id| focused(&view) == Some(id));
+            if !same_row {
+                this.widget.ids.clear();
+            }
         }
         this.widget.view = view;
         this.ctx.request_layout();
