@@ -156,6 +156,8 @@ Each panel is one list, and each row is an option in it. The list is what the sc
 - An unavailable row is listed and says so.
 - An empty folder is one label, "Empty folder", inside the list. While a folder is read it says "Reading folder".
 - The header drawn above the other panel is for the eye. A screen reader gets the panel's name from its list.
+- Each panel's list says its columns after its name, as the list's description: "Columns: Name, Type, Size, Modified".
+- With more than one tab in a panel, the tab follows the place. The window's title reads "work, tab 2 of 2 - diroxide", the list's name "Left panel, work, tab 2 of 2", and the other panel's header "work, tab 2 of 2, left panel, 1 item". With one tab in a panel nothing about tabs is said, and no tab bar is drawn in any case: a tab's state is in words. [Tabs](tabs.md) has the commands.
 
 ### The status bar
 
@@ -181,7 +183,7 @@ How the window reads a key:
 - AltGr is text. A character typed with AltGr goes to a field, or to find by name, as typed.
 - The keypad's plus, minus, star and slash are told apart from the main row's.
 - A held key repeats only where a repeat means something: the arrows, Page Up, Page Down, Home and End, and in a field Backspace, Delete and typed characters. Any other repeat is dropped, so a held F8 cannot open a second question.
-- On macOS the GUI uses Command where the key lists say Ctrl, and a chord with Option is read by the key's place on the keyboard.
+- On macOS the GUI uses Command where the key lists say Ctrl, except for Next tab and Previous tab, which stay on Control (Ctrl+Tab and Ctrl+Shift+Tab) because macOS keeps Command+Tab for switching programs. A chord with Option is read by the key's place on the keyboard.
 - F11 and F12 reach diroxide. They are not the toolkit's debugging keys. F11 is the key of the Full screen command, which turns full screen on and off, as [focus mode and full screen](#focus-mode-and-full-screen) says.
 
 ### Keys that cannot arrive
