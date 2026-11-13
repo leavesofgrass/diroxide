@@ -3,17 +3,235 @@
 //! (`App::open_list` with `ListKind::Flat`), over
 //! `diroxide_search::flat_view`.
 //!
-//! Reserved by the pre-wiring step (lane P5); its command is routed by
-//! `collections.rs`. Says "Not built yet: Flat view." until lane LA
-//! fills it.
+//! Flat view (View menu, palette; no key, question 131) opens a short
+//! form of its settings as rows, Start first: the depth, files only, and
+//! hidden files as the panel shows them. Start opens the lister ("Flat
+//! view of work: listing files only"), the rows arrive as a search's do,
+//! and the end is said: "Flat view on, 14 files in 4 folders." Escape
+//! while it lists stops it: "Stopped at 4,200 entries." Flat view again
+//! while the list is open turns it off: "Flat view off. work."
 
-use diroxide_core::Command;
+use diroxide_core::{Command, ListModel, ListRow, Message, Place, Side};
+use diroxide_search::flat::root_name;
+use diroxide_search::{FlatOptions, FlatSummary, flat_off_words};
 
-use super::{App, Effect};
+use super::collections::ListsWants;
+use super::organize::Wants;
+use super::searching::{ListKind, ListOpen};
+use super::{App, Effect, Purpose};
+use crate::commands::ids;
+use crate::dialog::Dialog;
+use crate::entry::{CompletionSource, EntryField};
+use crate::lists::ListsAsk;
+use crate::request::Request;
+
+/// The form's rows, by id.
+const START: &str = "start";
+const DEPTH: &str = "depth";
+const FILES_ONLY: &str = "files-only";
+const HIDDEN: &str = "hidden";
+
+/// The depth in words for its row: "every level", "1 level", "3
+/// levels".
+fn depth_words(options: &FlatOptions) -> String {
+    match options.depth {
+        None => "every level".to_owned(),
+        Some(1) => "1 level".to_owned(),
+        Some(n) => format!("{n} levels"),
+    }
+}
+
+/// The flat view's settings as a list, Start first: "Flat view of work".
+pub(super) fn form_model(root: &Place, options: &FlatOptions) -> ListModel {
+    let files_only = if options.folders {
+        "Files only: no, folders too"
+    } else {
+        "Files only: yes"
+    };
+    let hidden = if options.hidden {
+        "Hidden files: listed"
+    } else {
+        "Hidden files: left out"
+    };
+    let rows = vec![
+        ListRow::new(START, "Start the flat view"),
+        ListRow::new(DEPTH, format!("Depth: {}", depth_words(options))),
+        ListRow::new(FILES_ONLY, files_only),
+        ListRow::new(HIDDEN, hidden),
+    ];
+    let mut list = ListModel::new(format!("Flat view of {}", root_name(root))).with_rows(rows);
+    list.set_help("Enter starts, or changes the setting on its row. Escape closes.");
+    list
+}
 
 impl App {
-    /// Flat view: on for this panel's folder, or off.
-    pub(super) fn flat_view_toggle(&mut self, command: &Command) -> Vec<Effect> {
-        self.not_built(&command.id)
+    /// Flat view: the settings form for this panel's folder, or off when
+    /// the flat view's list is open.
+    pub(super) fn flat_view_toggle(&mut self, _command: &Command) -> Vec<Effect> {
+        let lister_open = self
+            .opens
+            .iter()
+            .any(|open| matches!(open.purpose, Purpose::Results));
+        if lister_open && self.list_kind() == Some(&ListKind::Flat) {
+            let side = self.list_owner().map_or(self.active, |(side, _)| side);
+            let root = self.panel(side).place().clone();
+            self.request(Request::StopSearch);
+            let mut effects = self.close_all();
+            effects.push(self.say(Message::info(flat_off_words(&root))));
+            return effects;
+        }
+        let side = self.active;
+        let root = self.panel(side).place().clone();
+        let options = FlatOptions::for_panel(self.panel(side).shows_hidden());
+        self.flat_form(side, root, options, None)
+    }
+
+    /// Opens the settings form, its focus on a row when one is named.
+    fn flat_form(
+        &mut self,
+        side: Side,
+        root: Place,
+        options: FlatOptions,
+        focus: Option<&str>,
+    ) -> Vec<Effect> {
+        let mut list = form_model(&root, &options);
+        if let Some(id) = focus {
+            list.focus_id(id);
+        }
+        self.open_organize(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::FLAT_VIEW),
+            },
+            Wants::Lists(ListsWants::FlatForm {
+                side,
+                root,
+                options,
+            }),
+        )
+    }
+
+    /// Enter on a row of the form: Start, the depth field, or a setting
+    /// changed and said as the form opens again on it.
+    pub(super) fn flat_form_row(
+        &mut self,
+        side: Side,
+        root: Place,
+        options: FlatOptions,
+        row: &str,
+    ) -> Vec<Effect> {
+        let mut effects = self.close_all();
+        match row {
+            START => effects.extend(self.start_flat(side, root, options)),
+            DEPTH => {
+                let text = options.depth.map(|d| d.to_string()).unwrap_or_default();
+                let field =
+                    EntryField::new("Depth, empty or 0 for every level", CompletionSource::None)
+                        .with_text(text);
+                effects.extend(self.open_organize(
+                    Dialog::edit(field),
+                    Wants::Lists(ListsWants::FlatDepth {
+                        side,
+                        root,
+                        options,
+                    }),
+                ));
+            }
+            FILES_ONLY => {
+                let folders = !options.folders;
+                let options = options.with_folders(folders);
+                effects.extend(self.flat_form(side, root, options, Some(FILES_ONLY)));
+            }
+            HIDDEN => {
+                let hidden = !options.hidden;
+                let options = options.with_hidden(hidden);
+                effects.extend(self.flat_form(side, root, options, Some(HIDDEN)));
+            }
+            _ => {}
+        }
+        effects
+    }
+
+    /// The depth typed: a number of levels, or every level; the form
+    /// opens again on its row.
+    pub(super) fn flat_depth_typed(
+        &mut self,
+        side: Side,
+        root: Place,
+        options: FlatOptions,
+        text: &str,
+    ) -> Vec<Effect> {
+        let text = text.trim();
+        let depth = if text.is_empty() {
+            Some(0)
+        } else {
+            text.parse::<u32>().ok()
+        };
+        let Some(depth) = depth else {
+            return vec![self.say(Message::error(
+                "Depth is a number of levels: 1 for this folder's files.",
+            ))];
+        };
+        let mut effects = self.close_all();
+        let options = options.with_depth(Some(depth));
+        effects.extend(self.flat_form(side, root, options, Some(DEPTH)));
+        effects
+    }
+
+    /// The form again, on the depth row, after its field closed.
+    pub(super) fn flat_form_again(
+        &mut self,
+        side: Side,
+        root: Place,
+        options: FlatOptions,
+    ) -> Vec<Effect> {
+        self.flat_form(side, root, options, Some(DEPTH))
+    }
+
+    /// Starts the flat view: the lister opens empty and streams.
+    fn start_flat(&mut self, side: Side, root: Place, options: FlatOptions) -> Vec<Effect> {
+        let name = root_name(&root);
+        let open = ListOpen {
+            kind: ListKind::Flat,
+            side,
+            title: format!("Flat view of {name}"),
+            root: Some(root.clone()),
+            hits: Vec::new(),
+            gone: Vec::new(),
+            notes: Vec::new(),
+            start: format!("Flat view of {name}: listing {}", options.mode_words()),
+            streaming: true,
+        };
+        let (effects, list) = self.open_list(open);
+        self.lists_ask(ListsAsk::Flat {
+            list,
+            root,
+            options,
+        });
+        effects
+    }
+
+    /// The walk ended: "Flat view on, 14 files in 4 folders.", or
+    /// "Stopped at 4,200 entries.", then what was left out.
+    pub(super) fn flat_done(
+        &mut self,
+        list: u64,
+        result: Result<Box<FlatSummary>, Message>,
+    ) -> Vec<Effect> {
+        match result {
+            Ok(summary) => {
+                let mut line = format!("{}.", summary.on_words());
+                for sentence in summary.skip_sentences() {
+                    line.push(' ');
+                    line.push_str(&sentence);
+                }
+                let mut effects = vec![Effect::Redraw(super::Redraw::All)];
+                // The lister's own end: the list stops running, and the
+                // flat view's words are said instead of a search's.
+                effects.extend(self.search_done(list, Err(Message::done(line))));
+                effects
+            }
+            Err(message) => self.finish_results_failed(list, message),
+        }
     }
 }

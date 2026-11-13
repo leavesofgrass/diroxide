@@ -164,7 +164,7 @@ mod tests {
         // The trash key in a collection: lane LA's removal, not the trash.
         let effects = app.handle(crate::app::AppEvent::Key(Key::parse("delete").unwrap()));
         let said = announced(runtime.run_until_idle(&mut app, effects));
-        assert_eq!(said, [format!("{NOT_BUILT}Remove from collection.")]);
+        assert_eq!(said, ["Lists need a state folder, and this run has none."]);
         let effects = app.dialog_escape();
         runtime.run_until_idle(&mut app, effects);
 
