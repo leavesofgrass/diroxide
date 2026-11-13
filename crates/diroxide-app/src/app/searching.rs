@@ -1872,10 +1872,6 @@ impl App {
 /// trash key does in it; the title and the start line are the opener's.
 /// One list at a time: opening one replaces the last.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 pub(crate) enum ListKind {
     /// A search's results: Find files, a saved search, the largest items.
     Search,
@@ -1897,13 +1893,13 @@ pub(crate) enum ListKind {
     DuplicateGroup,
 }
 
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 impl ListKind {
     /// What the list is, in words, for a sentence: "search results", "the
     /// collection Trip photos".
+    #[allow(
+        dead_code,
+        reason = "the pre-wiring step's (P5) words; no lane says them yet"
+    )]
     pub(crate) fn words(&self) -> String {
         match self {
             ListKind::Search => "search results".to_owned(),
@@ -1926,10 +1922,6 @@ impl ListKind {
 
 /// A list to open in the results lister ([`App::open_list`]).
 #[derive(Clone, Debug)]
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 pub(crate) struct ListOpen {
     /// What it is.
     pub kind: ListKind,
@@ -1956,10 +1948,6 @@ pub(crate) struct ListOpen {
 
 /// Said once a session when another list replaces a search's results: 28
 /// cells.
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 pub(crate) const REPLACES_RESULTS: &str = "Replaces the search results.";
 
 impl App {
@@ -1973,10 +1961,6 @@ impl App {
     /// the trash key (a collection's item leaves the collection; a label's
     /// item loses the label), Show in its folder, Remove from results and
     /// the refining filter.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn open_list(&mut self, open: ListOpen) -> (Vec<Effect>, u64) {
         let replaces = !self.searching.replaced_said
             && open.kind != ListKind::Search
@@ -2043,19 +2027,11 @@ impl App {
     }
 
     /// What the list on the screen is, when one is.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn list_kind(&self) -> Option<&ListKind> {
         self.searching.current.as_ref().map(|s| &s.kind)
     }
 
     /// The panel and tab the list belongs to.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn list_owner(&self) -> Option<(Side, u64)> {
         self.searching.current.as_ref()?.owner
     }
@@ -2152,10 +2128,6 @@ impl App {
 
     /// Takes rows out of the list on the screen by their places, as Remove
     /// from results does, for a list whose store dropped them.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn list_remove_places(&mut self, places: &[Place]) -> Vec<Effect> {
         let Some(search) = self.searching.current.as_mut() else {
             return Vec::new();

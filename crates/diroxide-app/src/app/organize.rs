@@ -161,23 +161,11 @@ pub(super) enum Wants {
     Rename(super::renaming::RenameWants),
     /// The dialogs of compare folders and synchronize (alpha 5, lane SA;
     /// reserved by lane P5).
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Sync(super::syncing::SyncWants),
     /// The dialogs of duplicates (alpha 5, lane DA; reserved by lane P5).
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Dups(super::duplicates::DupsWants),
     /// The dialogs of the flat view, collections and recent files (alpha
     /// 5, lane LA; reserved by lane P5).
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Lists(super::collections::ListsWants),
 }
 
