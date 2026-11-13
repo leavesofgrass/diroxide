@@ -37,7 +37,7 @@ After each change the count line is said once, and the rows are not read. When a
 The count line is the first row of the list and the name of the preview. It says problems first, because they are what stops you:
 
 - "2 problems. 46 of 50 files will change."
-- "No problems, 3 need care. 47 of 50 change."
+- "3 need care. 47 of 50 will change."
 - "3 of 3 files will change. No problems."
 - "No file would change."
 
@@ -119,7 +119,7 @@ Space skips the focused row or takes it back, and F2 edits its new name, in the 
 
 With a problem left, it refuses and moves the focus to the first one: "Cannot rename: 3 problems. First: name taken, a.txt becomes b.txt." Nothing is asked.
 
-Without one, it asks, and the question starts on No: "Rename 3 files in FOLDER? No is the default. y or n". No or Escape says "Nothing renamed."
+Without one, it asks, and the question starts on No: "Rename 3 files in photos? No is the default. y or n". It names the folder, not its whole path, so the meaning stays near the start; the listing under the question has the paths. For files in several folders it says how many: "Rename 12 files in 3 folders, 1 needs care?". No or Escape says "Nothing renamed."
 
 On Yes, diroxide says "Checking the folder again." and reads the folders once more. If a name changed since the preview, it refuses in words and makes you look again: "The names changed since the preview. Preview again." Otherwise the batch runs as one job, and a finished batch says "Renamed 3 files." Cancel in the Jobs list stops it. The job is one entry for Undo, and Ctrl+Z puts every name back in one step, even after the dialog is long closed.
 
@@ -133,7 +133,7 @@ The plugins' `before_rename` and `after_rename` hooks hear the batch as they hea
 - Each line is keyed: the new name, then the old one in brackets, "trip-01.jpg (was IMG_0001.jpg)". A line you move or delete still finds its file by the key. The setting `rename.editor_lines` switches to `plain`, one new name a line, in the order of the rows.
 - When you close the editor, diroxide asks "Done editing? No is the default. y or n". It asks whether or not the editor's program waited, since some do not. Answer Yes when you have saved and closed.
 - On Yes it reads the names back: "Names read. 1 of 3 files will change. No problems." Names you typed show as "Edited by you".
-- A buffer it cannot read back is refused in words, with its line, and kept for another try: "Names not read. Edit names in editor again when done." A changed number of lines is refused.
+- A buffer it cannot read back is refused in words, with the line, and kept for another try. A keyed line whose old name is not in the batch, or is on an earlier line, says "Names not read: line 2, unknown (was)". An empty line says "Names not read: line 3 is empty". A file with no line says how many: "Names not read: 1 file has no line. Nothing renamed." In the plain form, a changed number of lines is refused too. Closing the question with Escape says "Names not read. Edit names in editor again when done."
 
 ## Presets and passes
 
@@ -174,7 +174,7 @@ Nothing is ever overwritten. A name that is taken is a problem row, and the batc
 
 ## Limits
 
-- Details placeholders such as `{meta:exif.date}` are in the list of placeholders, but no values are fed to them in this build. A rule that uses one makes every row a problem: "Problem, no value for {meta:exif.date}". [Known limits](known-limits.md#batch-rename) says it too.
+- Details placeholders such as `{meta:exif.date}` are not in the list of placeholders, since no values are fed to them in this build. A template typed by hand with one makes every row a problem: "Problem, no value for {meta:exif.date}". [Known limits](known-limits.md#batch-rename) says it too.
 - The commands inside a batch, Next problem, Say both names, Make names unique and the rest, have no keys. Each is reached by Enter on a row, since the palette cannot open over a dialog.
 - The plan is made again after every change, on the app's thread. That is fast for hundreds of files and has not been timed for 10,000.
 - Back from an editor in a terminal, diroxide says "Back in diroxide, photos", and the open "Done editing?" question is not said again.
