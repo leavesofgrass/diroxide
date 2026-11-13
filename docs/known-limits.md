@@ -1,10 +1,10 @@
 # Known limits
 
-This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view and access facts, columns, checksums, encryption and signatures, privacy before sharing, conversions, watched folders, disk images, git, photos, and links, permissions and times are here as the alpha stands at its release. What alpha 4 held back for the next alpha is listed once, near the top. Where a limit has a workaround, the workaround comes first.
+This page says what diroxide does not do yet, where it is limited on purpose or by the system, and what has not been tested. It is kept current with each alpha: the sections on plugins, script commands, optional components, remote places, the transfer queue, and volumes and the trash arrived with alpha 2, and the section on the GUI arrived with alpha 3. Alpha 4's sections on tools, file types, previews, the details view and access facts, columns, checksums, encryption and signatures, privacy before sharing, conversions, watched folders, disk images, git, photos, and links, permissions and times are here as the alpha stands at its release. Alpha 5, which has not been released, adds the sections on tabs, compare folders and synchronize, duplicates, batch rename, and lists that are not folders, and changes the lines that alpha 4 held back for it. What alpha 4 held back for the next alpha is listed once, near the top. Where a limit has a workaround, the workaround comes first.
 
-## What is not in alpha 4 yet
+## What is not in alpha 5 yet
 
-Each item below is still to come. None of them is dated: a feature that is not in alpha 4 yet arrives in a later pass or a later alpha.
+Each item below is still to come. None of them is dated: a feature that is not in alpha 5 yet arrives in a later pass or a later alpha.
 
 - Parts of the graphical interface (GUI). On a desktop `diro` opens the window, and `diro --tui` opens the terminal. The window shows the panels, takes every key and says what happens, and it leaves out an icon on macOS, a native menu bar on macOS and a few smaller things. [The GUI](#the-gui) below lists what it does not do yet, and what has not been tried.
 - Changing an archive further. A zip can be edited: Delete, Rename and Make folder inside it rewrite it. Adding files to an existing archive is not built, and a 7z, a tar and an archive read through 7-Zip are never changed. Copy into one, rename, delete and make folder say "Archives are read only here. Use Pack to make a new one."
@@ -12,8 +12,9 @@ Each item below is still to come. None of them is dated: a feature that is not i
 - The quick view reads Markdown, plain text, code, the formats of carta (Org, reStructuredText, MediaWiki, DokuWiki and Jira), pictures, sound and video, archives, PDF, Word and other documents, and spreadsheets. [Previews](#previews) below says what it does not do.
 - Remote places other than SFTP come in a later alpha. SFTP places, the Volumes list and the trash browser are in this build; "Remote places over SFTP" and "Volumes and the trash" below say what they do not do.
 - Tools, previews, the file type model, columns, checksums, the privacy commands, conversions, watched folders, disk images, the git plugin, encryption and signatures, the access rows with Change time and Change owner, and the photo helpers are in alpha 4, and the sections below say what they do not do.
-- The folder tree, collections, comparing and synchronizing folders, duplicates, batch rename and phones over MTP come in a later alpha. Tabs are the exception: [Tabs](#tabs) below says what they do not do yet. Compare files works on two files; two folders come in a later alpha.
-- A grid of thumbnails for the photo helpers, an editor for extended attributes, and tasks other than watched folders, such as synchronizing and renaming, come in a later alpha. Extended attributes are read for the details view and are not edited.
+- The folder tree and phones over MTP come in a later alpha. Tabs, collections, comparing and synchronizing folders, duplicates and batch rename are in alpha 5: [Tabs](#tabs), [Compare folders and synchronize](#compare-folders-and-synchronize), [Duplicates](#duplicates), [Batch rename](#batch-rename) and [Lists that are not folders](#lists-that-are-not-folders) below say what they do not do yet.
+- A grid of thumbnails for the photo helpers, an editor for extended attributes, and tasks other than watched folders, such as a synchronize or a rename that runs by itself, come in a later alpha. Extended attributes are read for the details view and are not edited.
+- A Lua tier for plugins, saved synchronize tasks, an rsync engine and Save as script are not in this alpha.
 - Download files for Windows on ARM and Linux on ARM come in a later alpha. The releases have the files for Windows x86_64, macOS (one universal file) and Linux x86_64. `cargo install diro` comes with the first beta.
 - Passwords are asked for archives and for signing in to an SFTP server. The masked password prompt serves both.
 
@@ -22,9 +23,9 @@ Each item below is still to come. None of them is dated: a feature that is not i
 Each item below was planned for alpha 4, is known, and was left for a later alpha. A person may look for each, so it is named here, and it is also in the section of its feature.
 
 - Conversions and watched folders: a plugin's converters are not in the Convert list, and a plugin's command in a watched folder's task still pauses the task. The program has no Save report command. `diro convert --report FILE` writes one.
-- Columns: a field has no sort value, so a duration sorts as text, and field columns have no header or grid. A cell says "reading" for a kind of file that no reader takes, until the readers have been through it.
-- Encryption: the Encryption plugin writes its files itself, so Undo for an age command lasts for the session only, and gpg's ASCII armor is not offered.
-- Photos: the Taken column reads the date to the minute. Move into month folders is planned by the program, so a plugin's before-move hook does not run for it. A row of the details list has no help of its own.
+- Columns: a field can give a sort value in alpha 5, and the duration and dimensions columns sort as numbers; other fields still sort by their words. Field columns have no header or grid. A cell says "reading" for a kind of file that no reader takes, until the readers have been through it.
+- Encryption: the Encryption plugin writes its files itself, so Undo for an age command lasts for the session only. In alpha 5, gpg's ASCII armor is offered as two commands, "Encrypt with gpg, as text" and "Sign with gpg, as text".
+- Photos: the Taken column reads the date to the minute. Alpha 5 reads it to the second as a field of its own, `image.taken_second`, which the details list leaves out and the bursts do not use yet. Move into month folders is planned by the engine in alpha 5, so a plugin's before-move hook runs for it. A row of the details list has no help of its own.
 - Speed: listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. Alpha 5 removes the two causes, and a quiet machine has not measured it yet. [Other limits](#other-limits) has the numbers.
 - The window: a paste under Wayland with no XWayland still reads nothing, and no real Wayland compositor has been tried.
 
@@ -153,7 +154,7 @@ Each item below was planned for alpha 4, is known, and was left for a later alph
 
 ## Compare files
 
-- Two files only. Two folders come in a later alpha, and so does `--names -0`.
+- Compare files takes two files. Two folders are compared by Compare folders, and [that section](#compare-folders-and-synchronize) has its limits.
 - A file inside an archive is not compared. Copy it out first.
 - The unified view is a list, not a mode of the viewer. Enter on a row opens the viewer at its line.
 - Next and previous change are F7 and Shift+F7 in the compare list. Some terminals send Shift+F7 as another key. P, or Shift+F10 and its actions list, is the sure way. The Compare submenu in the Search menu cannot open while a compare is open.
@@ -175,6 +176,61 @@ This section is for alpha 5, which has not been released. [Tabs](tabs.md) is the
 - A tab set and a session keep each tab's folder, cursor row, sort, hidden files, history and lock. Marks, the filter and the columns are not kept.
 - Going back to alpha 4 loses the tabs. The session file's version is 2 in alpha 5, with each panel's tabs beside the two panels. Alpha 4 reads the panels as before and shows one folder in each, and when it writes the file at its quit, the other tabs are gone. Saved tab sets in `tab-sets.toml` are a file alpha 4 does not read.
 - The tests this page was written from open folders on the local disk. A tab on an SFTP place, inside an archive or on a plugin's list has not been tried. Nothing about tabs has been heard on NVDA, JAWS or Orca, or read on a Braille display.
+
+## Compare folders and synchronize
+
+This section is for alpha 5, which has not been released. [Compare files](compare.md#compare-two-folders) and [Synchronize](synchronize.md) are the guides.
+
+- The compare and the run start at once. They do not wait in the transfer queue behind other jobs. Compare progress is spoken but does not update the Jobs list's line.
+- Hidden items are always included by default, whatever the panel shows. The criteria list has a switch for them.
+- "By contents" is covered by the engine's tests and has not been tried by hand on a large tree.
+- Enter on a row of the plan lists what can change on it. Space to leave a row out or take it back in, and keys for Copy toward this panel and Copy toward the other panel, are not in this build: the rows' own list has them.
+- A result that the folders have outgrown is not marked old. After a change in either folder, Compare again before you Synchronize; a step whose file changed since the compare is skipped, and says so: "changed since the compare; compare again".
+- Enter on a Different row opens a change list of the two files. The key that views the file at the change has no files to open yet from there.
+- `diro sync` prints the engine's longer words for a plan, "Will be removed there: NAME, to the trash", where the window says "Trash there: NAME". The meaning is the same.
+- Nothing is replaced or removed for good from a shell: a place with no trash is refused.
+- No rsync engine, no saved synchronize tasks, no Save as script and no compare of an archive by its stored checksums.
+- A compare on an SFTP place, inside an archive or on a plugin's list has not been tried. Nothing here has been heard on NVDA, JAWS or Orca, or read on a Braille display.
+
+## Duplicates
+
+This section is for alpha 5, which has not been released. [Duplicates](duplicates.md) is the guide.
+
+- Duplicates go to the trash only. Nothing is deleted for good, and a group always keeps one copy.
+- No search inside archives, and no cache of hashes: a second search reads the files again.
+- "Keep the copies in FOLDER" matches the files directly in that folder, not in its subfolders.
+- A collection is not a place to look in yet. The scopes are the marked entries, this folder and both panels.
+- Pause in the Jobs list does not reach the search. Cancel does.
+- The marks are kept in the open dialog and are gone after Escape from the groups list.
+- Yes to the large-read question runs the listing and the quick check again.
+- Hidden files are dropped after the search in this build, so they are still read, and counted in the estimate that the large-read question quotes.
+- The trash report after a duplicates run does not say the bytes freed. The question before it says the size.
+- Nothing here has been tried on a real trash, with a hidden file on Windows, or on a remote place.
+
+## Batch rename
+
+This section is for alpha 5, which has not been released. [Batch rename](rename.md) is the guide.
+
+- Details placeholders, such as `{meta:exif.date}`, were cut from this alpha. They are in the template's list of placeholders, but the app feeds them no values, so a rule that uses one makes each row a problem: "Problem, no value for {meta:exif.date}". Dates and sizes from the file itself work.
+- The rules that need a Unicode table are not built: turning accented letters into plain ones, and changing a Unicode form.
+- The commands in a batch, Next problem, Previous problem, Say both names, Make names unique and the rest, have no keys. The palette cannot open over a dialog, so each is reached by Enter on a row.
+- The plan is made again after every change, on the app's thread. It is fine for hundreds of files and has not been timed for 10,000.
+- Back from an editor in a terminal, diroxide says "Back in diroxide, photos", and an open "Done editing?" question is not said again. No Windows editor other than the default has been tried.
+- `diro rename` has no `--format`, `--accept-care`, `--skip-problems`, `--sort`, `--undo` or `--edit` yet.
+- Nothing here has been heard on NVDA, JAWS or Orca, or read on a Braille display.
+
+## Lists that are not folders
+
+This section is for alpha 5, which has not been released. [Flat view, collections and recent files](collections.md) is the guide.
+
+- The flat view's copy and move do not ask whether to keep the folders, and its refining filter matches names and not the folder text.
+- A flat view's rows read "a.txt, in work/b/deep", the way the lister gives them, and its settings are not remembered from one time to the next.
+- Save as collection, Collect and Remove missing items close an open list before they run, so from a list they do not reach the list's places. Use them from the panel for now.
+- A file opened from inside a results list is not kept in the recent files. Enter and F4 in a panel keep it.
+- A collection's items are all checked when it opens, which is slow for a very long one.
+- `diro -` prints its list as lines and does not open it in the app. Its opening options are taken and kept for when it does.
+- On macOS, `diro -` needs crossterm's `use-dev-tty` feature to read keys with a pipe on standard input; that is a manifest line that is not set yet.
+- Nothing here has been heard on NVDA, JAWS or Orca, or read on a Braille display.
 
 ## Keys and presets
 
@@ -347,7 +403,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 [Columns, notes and fields](columns.md) describes them. These are the limits.
 
 - A background column reads only the rows around the focus. A row elsewhere says "reading" until the focus comes near or Fill columns reads it.
-- Sorting is by a cell's words, so a duration sorts as text. There is no sort value on a field yet.
+- Sorting is by a cell's words, except where a field gives a sort value: the duration and dimensions columns sort as numbers in alpha 5.
 - A file says "reading" for a column until the readers have been through it, even for a kind of file that no reader takes for that key, such as `audio.artist` on a zip. Its cell is then left out. The program does not yet know in advance which readers take a file.
 - The window shows a field column in each row's words and has no header or grid for it.
 - A saved view keeps the columns in use when it was saved.
@@ -369,7 +425,7 @@ The trash is the default way to delete, and the places where it cannot be truste
 [Encryption and signatures](encryption.md) describes them. These are the limits.
 
 - The three age commands need the Encryption plugin, an optional component. The plugin writes its files itself, and the program records them for Undo from the plugin's answer. That record lives for the session only, and does not survive a restart.
-- ASCII armor is offered for age and not for gpg, so every gpg result is `.gpg` or `.sig`.
+- ASCII armor is offered for age, and for gpg as the two commands "Encrypt with gpg, as text" and "Sign with gpg, as text", whose results are `.asc` text. The plain gpg commands still write `.gpg` or `.sig`.
 - age encrypts with a passphrase or an age public key, and decrypts with a passphrase or an identity file. SSH keys, plugin keys and hardware keys are refused, and the age program is not used as a road around the plugin.
 - On Windows, gpg's agent is stopped with each run, so a passphrase is not remembered from one command to the next, and a command that needs the agent waited about six seconds on the one computer it was measured on.
 - A minisign public key is asked every time and kept nowhere. Verify checksum does not check a list's minisign signature.

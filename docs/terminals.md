@@ -24,6 +24,7 @@ diroxide sets the terminal's title to the active place, so a screen reader that 
 Terminals were designed for text, so some keys never arrive, or arrive as another key. diroxide's terminal column avoids all of them, and the palette and the menus reach every command. [The keyboard page](keyboard.md) lists them with the reason for each.
 
 - Some keys are other keys in disguise: Ctrl+I is Tab, Ctrl+M is Enter, Ctrl+H is often Backspace, Ctrl+J is a line feed and Ctrl+[ is Escape. diroxide never binds them.
+- Ctrl+T and Ctrl+W are plain control keys, so a terminal sends them as they are, and diroxide's terminal column binds them: New tab and Close tab. Terminals that take tabs of their own use Ctrl+Shift+T and Ctrl+Shift+W, which are not the same keys. The rest of the tab keys, Ctrl+Tab, Ctrl+Shift+Tab and Alt with a digit, are for the window; in a terminal use the View menu's Tabs submenu (Alt+V, then N). [Tabs](tabs.md#keys) has them.
 - Shift+Enter, Ctrl+Enter, Ctrl+Tab and most Ctrl+Shift letters have no form a terminal can send. Ctrl+Space is not safe either. diroxide's terminal column does not use them. The window, which `diro` opens on a desktop, uses some of them, such as Ctrl+Shift+P for the palette. [The GUI](gui.md) describes it.
 - F1, F10, F11 and F12 are often kept by the terminal for help, a menu or full screen. Help in the terminal is Shift+F1 or the question mark, and the menus are on F9.
 - The keypad's plus, minus, star and slash arrive as the main row's characters in a Windows terminal. A command never depends on a keypad-only key.
