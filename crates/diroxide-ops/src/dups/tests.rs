@@ -737,3 +737,42 @@ fn sha256_hashes_in_steps_and_hears_cancel() {
     let stopped = Sha256Hasher.hash(&mut std::io::Cursor::new(data), &cancel, &mut |_| {});
     assert_eq!(stopped, Err(VfsError::Cancelled));
 }
+
+/// Question 136 (lane AS): with `include_hidden` off, a hidden file and
+/// everything in a hidden folder are left out before any hashing; the
+/// fake provider marks nothing hidden, so the walk's filter is tested on
+/// entries made here.
+#[test]
+fn hidden_files_and_hidden_folders_contents_are_left_out() {
+    use diroxide_core::{Entry, EntryKind};
+    let entry = |name: &str, kind: EntryKind, hidden: bool| {
+        let mut entry = Entry::new(name, kind);
+        entry.hidden = hidden;
+        entry
+    };
+    let mut filter = find::HiddenFilter::default();
+    assert!(!filter.leaves_out(&p("/t/a.txt"), &entry("a.txt", EntryKind::File, false)));
+    assert!(filter.leaves_out(&p("/t/.b.txt"), &entry(".b.txt", EntryKind::File, true)));
+    assert!(filter.leaves_out(&p("/t/.git"), &entry(".git", EntryKind::Folder, true)));
+    assert!(filter.leaves_out(&p("/t/.git/c.txt"), &entry("c.txt", EntryKind::File, false)));
+    assert!(filter.leaves_out(&p("/t/.git/d"), &entry("d", EntryKind::Folder, false)));
+    assert!(filter.leaves_out(
+        &p("/t/.git/d/e.txt"),
+        &entry("e.txt", EntryKind::File, false)
+    ));
+    assert!(!filter.leaves_out(&p("/t/f/g.txt"), &entry("g.txt", EntryKind::File, false)));
+
+    // On by default: the fake's files are all read, nothing said.
+    assert!(DupOptions::default().include_hidden);
+    let result = DupResult {
+        hidden_left_out: 3,
+        ..three_dated(&FakeProvider::new())
+    };
+    let line = "3 hidden files left out";
+    assert!(
+        result.notes().contains(&line.to_owned()),
+        "{:?}",
+        result.notes()
+    );
+    assert_eq!(line.chars().count(), 23);
+}

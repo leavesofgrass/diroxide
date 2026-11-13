@@ -173,11 +173,35 @@ struct Search<'a> {
     files_seen: u64,
     empty_left_out: u64,
     small_left_out: u64,
+    hidden_left_out: u64,
     hard_links_left_out: u64,
     unreadable: u64,
     reached_twice: u64,
     no_quick: u64,
     compared: bool,
+}
+
+/// Hidden entries below a root, in the walk's pre-order: an entry is
+/// left out when it is hidden itself or sits in a hidden folder met
+/// before it.
+#[derive(Default)]
+pub(super) struct HiddenFilter {
+    folders: HashSet<String>,
+}
+
+impl HiddenFilter {
+    /// Whether this entry is left out; a hidden folder is kept in mind
+    /// for what is in it.
+    pub(super) fn leaves_out(&mut self, place: &Place, entry: &diroxide_core::Entry) -> bool {
+        let in_hidden = place
+            .parent()
+            .is_some_and(|parent| self.folders.contains(&parent.to_string()));
+        let out = entry.hidden || in_hidden;
+        if out && entry.kind != EntryKind::File {
+            self.folders.insert(place.to_string());
+        }
+        out
+    }
 }
 
 impl<'a> Search<'a> {
@@ -197,6 +221,7 @@ impl<'a> Search<'a> {
             files_seen: 0,
             empty_left_out: 0,
             small_left_out: 0,
+            hidden_left_out: 0,
             hard_links_left_out: 0,
             unreadable: 0,
             reached_twice: 0,
@@ -269,7 +294,17 @@ impl<'a> Search<'a> {
             for (place, why) in walked.left_out {
                 self.leave_out(place, why);
             }
+            let mut hidden = HiddenFilter::default();
             for found in walked.found {
+                if !self.options.include_hidden
+                    && !found.path.is_empty()
+                    && hidden.leaves_out(&found.place, &found.entry)
+                {
+                    if found.entry.kind == EntryKind::File {
+                        self.hidden_left_out += 1;
+                    }
+                    continue;
+                }
                 if found.entry.kind != EntryKind::File || !seen.insert(found.place.to_string()) {
                     continue;
                 }
@@ -669,6 +704,7 @@ impl<'a> Search<'a> {
             left_out: self.left_out,
             empty_left_out: self.empty_left_out,
             small_left_out: self.small_left_out,
+            hidden_left_out: self.hidden_left_out,
             hard_links_left_out: self.hard_links_left_out,
             unreadable: self.unreadable,
             reached_twice: self.reached_twice,
