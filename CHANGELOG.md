@@ -4,7 +4,47 @@ Notable changes to diroxide, newest first. Agents write under a scratch heading 
 
 ## Unreleased: alpha 5
 
-Alpha 5 is the planned alpha.8, in the making. This section was opened on Thursday, November 12, 2026 with tabs, the recent files setting, the follow-ups to alpha 4 and the speed and fuzzing work that are merged, and the lanes still to merge add their entries. Nothing is released until the owner says so.
+Alpha 5 is the planned alpha.8, in the making: tabs, batch rename, compare and synchronize for folders, duplicates, lists that are not folders, four new commands for the shell, and the follow-ups to alpha 4. Nothing is released until the owner says so.
+
+### Batch rename
+
+- Batch rename renames the marked entries by rules. Rules are data: find and replace as text or as a pattern with groups, insert and remove by position counted in perceived characters, counters with a start, step and width, case forms, tidy rules, and templates with `{stem}`, `{ext}`, `{name}`, `{old-*}`, `{parent}`, `{counter}`, dates and sizes. Passes run one after another; presets are `rename-presets.toml` in the config folder, and the last rules are `rename-last.toml` in the state folder.
+- A pattern is limited and says so in words: at most 1,000 characters, no look-around and no backreference, each refused with the way round it.
+- The preview is the plan: one row for each entry in words, state first, problems first by default (`rename.preview_order`), with a count line first, "2 problems. 46 of 50 files will change." Rows can be skipped, edited by hand, numbered apart (Make names unique) or left out together (Skip problems).
+- Swaps, rings and case-only changes go through temporary names; a name that is taken, two rows with one new name, a reserved character, a name too long, a counter below zero and an entry inside an archive are problem rows. Rename now refuses with a problem left, and asks otherwise, on No. The folders are read again before the run, a change is refused in words, and one job has one undo record.
+- Edit names in editor writes keyed lines to `rename-NUMBER.txt` in the state folder (`rename.editor_lines`: keyed or plain), then asks "Done editing?" and reads the names back, refusing a changed count in words.
+- F2 with several entries marked opens Batch rename; Rename one by one keeps the old stepping. Space skips a row in the preview and F2 edits it. A finished batch says "Renamed 3 files."
+- `diro rename`: paths, `--in FOLDER` with `--filter`, `--stdin` and `--from-pairs`; `--find`, `--regex`, `--template`, `--case`, `--apply-to`, `--preset`, `--recipe`, `--dry-run` and `--yes`. Exit codes 0, 1, 2 and 3.
+- Details placeholders (`{meta:FIELD}`) were cut from this alpha: no values are fed to them.
+- New guide: [Batch rename](docs/rename.md).
+
+### Compare folders and synchronize
+
+- Compare folders compares this panel's folder with the other's by size and time (`compare.folder_tolerance_seconds`, 2 and no less; `compare.folder_hour_shift`), by size only or by contents, as a cancellable job. Statuses are words: only here, only there, different with its reason, type differs, unreadable, skipped. The count line adds up: "17 differences in 1,202 items: 12 only here, 3 only there, 2 different. 1,185 same."
+- Synchronize makes a plan in five modes (update the other panel, update this panel, both ways with the newer winning, mirror to either panel), one row for each change, problems first, removals listed. A row can be left out or turned around. The question starts on No. A replace or a removal sends the old file to the trash first and says "for good" where the place has none. The run is one job with one undo record, reads every place again first, and skips a step whose file changed.
+- `before_copy` and `before_delete` hooks are asked about a synchronize's copies and removals, and the after events are split the same way.
+- `diro diff` takes two folders (`--brief`, `--names`), and `diro sync HERE THERE` has `--mode`, `--by`, `--tolerance`, `--dry-run` and `--yes`; nothing is replaced or removed for good from a shell.
+- New guide: [Synchronize](docs/synchronize.md); [Compare](docs/compare.md) gained the folder compare.
+
+### Duplicates
+
+- Find duplicates groups by size, then the first and last blocks, then a BLAKE3 hash, then bytes on request. Empty files and hard links to one file are said and left out. A search that would read more than `duplicates.ask_above_gb` (10) asks first, on No; `duplicates.hidden` follows the panel by default.
+- The groups open largest waste first with a count line, "1 group, 2 files, 11 bytes to free". Five rules choose the copy to keep and never a whole group. The only way out is the trash, after every kept and marked copy is read again; a group whose kept copy changed is refused whole.
+- `diro dups` prints the same, with `--keep`, `--keep-in`, `--format tsv` and `json`, `-0` and `--bytes`, and removes nothing.
+- New guide: [Duplicates](docs/duplicates.md).
+
+### Lists that are not folders
+
+- The flat view lists every file below a folder, streamed so the first rows show at once, with depth, files only and hidden files as settings of the form.
+- Collections are named lists of places, one file each in the `saved` folder of the state folder. Save as collection, Collect (to "Collected"), rename, remove (to the trash, on No) and Remove missing items; taking an item out never touches its file. A saved search is the live kind and runs on open.
+- Recent files keeps what you opened with Enter or edited with F4, never F3, in `recent.toml`; `recent_files` turns it off.
+- `diro -` reads paths from standard input, NUL-separated or one a line (`--lines`), at most 16,384 paths or 64 MiB (`lists.stdin_paths`, `lists.stdin_mib`); `diro ls -` reads the same way. It prints its list as lines for now.
+- New guide: [Flat view, collections and recent files](docs/collections.md).
+
+### Notepad fixes and the app follow-ups to alpha 4
+
+- F4 does not start a second editor on a file still starting ("Editor already started on f1.txt"); a Windows program with a window of its own starts through the system's shell on its full path; textweaver is the default editor when it is found, after the `editor` setting and VISUAL or EDITOR.
+- Encrypt with gpg, as text and Sign with gpg, as text make `NAME.asc`. Move into month folders is planned by the engine, with the hooks. Plugins' converters join the recipe book. `media.duration` and `media.dimensions` sort as numbers, and `image.taken_second` is left out of the details list. Undoing a mark removal says "Undid mark removal: 1 item is back".
 
 ### Tabs
 
