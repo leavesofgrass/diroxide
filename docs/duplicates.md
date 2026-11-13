@@ -15,7 +15,7 @@ Two files are duplicates when their contents are the same. diroxide does not tru
 3. It reads the rest in full and takes a BLAKE3 hash, the same one the Checksum command uses. Files with the same hash are a group.
 4. With the byte check on, it compares the bytes of whole files too, so a hash that matched by chance cannot cost you a file.
 
-Left out on purpose, and said: empty files ("1 empty file left out.") and several names of one file, a hard link, which are one file and not a copy. Hidden files follow the Hidden files option.
+Left out on purpose, and said: empty files ("1 empty file left out.") and several names of one file, a hard link, which are one file and not a copy. Hidden files follow the Hidden files option, and when they are left out they are left out before anything is hashed or counted, so they cost no reading and are not in the estimate: "3 hidden files left out".
 
 ## Find duplicates
 
@@ -44,7 +44,7 @@ Reading many big files takes time, so a search that would read more than `duplic
 
 ## While it works
 
-The search is a job. The jobs line starts "Finding duplicates in PATH". Progress is said at the progress interval: "Listing, 1,200 files found", then "Hashing 120 of 450 files". The engine's own line for the same stage reads "Duplicates: hashing, 38 percent". Cancel in the Jobs list, or Escape, stops it: "Finding duplicates was cancelled." Pause does not reach the search; Cancel does.
+The search is a job. The jobs line starts "Finding duplicates in PATH", with no closing period. When the line is said aloud it ends with one, "Finding duplicates in work.", so it is not run into the count line that follows; "Checking 1 copy again." does the same. Progress is said at the progress interval: "Listing, 1,200 files found", then "Hashing 120 of 450 files". The engine's own line for the same stage reads "Duplicates: hashing, 38 percent". Cancel in the Jobs list, or Escape, stops it: "Finding duplicates was cancelled." Pause does not reach the search; Cancel does.
 
 ## The groups
 
@@ -57,7 +57,7 @@ Enter on a group lists its copies. The list is named "Group 1 of 3, 3 copies". E
 - "Kept: a.txt, in PATH"
 - "Marked: b.txt, in PATH"
 
-Enter on a copy changes its mark and says it once: "Marked b.txt" or "Kept b.txt". A group must keep one copy: when you try to mark the last kept one, "One copy must stay." The last row, "Show these in the results list", opens the group's files in the general list, each with "kept" or "marked" after its name.
+Space or Enter on a copy changes its mark and says it once: "Marked b.txt" or "Kept b.txt". A group must keep one copy: when you try to mark the last kept one, "One copy must stay." The last row, "Show these in the results list", opens the group's files in the general list, each with "kept" or "marked" after its name.
 
 Escape goes back a level. The marks live in the open dialog: when you leave the groups list with Escape they are gone, so choose and trash in one visit.
 
@@ -78,6 +78,8 @@ A rule never marks a whole group. A group it leaves alone is said, with the reas
 "Trash the marked" asks first, with the count and the size, starting on No: "Trash 1 copy, 11 bytes? No is the default. y or n". n or Escape says "Nothing moved to the trash."
 
 Before it asks, every kept and every marked copy is read again. The listing begins "Checked again: 1 file can go to the trash". A group whose kept copy changed since the search is refused whole, so a copy cannot go while its last twin has changed: "Group 1 refused: the kept copy, new.txt, changed".
+
+When the job ends, the report starts with the bytes freed: "Freed 4.0 KB: moved 2 items to the trash. They can be restored."
 
 The trash is the only way out. Duplicates are never deleted for good, and Undo brings the files back from the trash: [volumes and the trash](volumes-trash.md) says how the trash works on each system.
 
@@ -104,7 +106,7 @@ Nothing is removed from a shell in this alpha. The marked files are a list to fe
 - A collection is not a scope yet. The scopes are marked entries, this folder and both panels.
 - "Keep the copies in FOLDER" matches the files directly in that folder, not in its subfolders.
 - The marks are gone after Escape from the groups list.
-- Hidden files are dropped after the search in this build, so they are still read and counted in the estimate before the question. [Known limits](known-limits.md#duplicates) says what is waiting.
+- [Known limits](known-limits.md#duplicates) has the same list.
 
 ## See also
 
