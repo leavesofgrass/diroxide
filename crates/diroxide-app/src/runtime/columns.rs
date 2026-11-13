@@ -18,7 +18,7 @@ use std::time::Instant;
 
 use diroxide_core::{Place, Side};
 use diroxide_meta::pipeline::{EXTENDED, EXTENDED_KEYS};
-use diroxide_meta::{Cell, Cost, Outcome, Pipeline, ReadLimits, ReadRequest};
+use diroxide_meta::{Cell, Cost, MetaError, Outcome, Pipeline, ReadLimits, ReadRequest};
 use diroxide_vfs::{OpContext, Registry};
 
 use super::Shared;
@@ -134,8 +134,9 @@ fn send(shared: &Arc<Shared>, job: &ColumnJob, cells: Vec<ColumnCell>) {
 }
 
 /// One file's cells: the pipeline's readers of each cost class its keys
-/// need, then each key's words. A cell the guard was too busy to read is
-/// left out, so the file is asked again at the next read.
+/// need, then each key's words. A reader the guard was too busy to run is
+/// asked again once it has room; one still refused after
+/// [`BUSY_TRIES`] reads says so in words.
 fn cells_of(job: &ColumnJob, item: &ColumnItem, ctx: &OpContext) -> ColumnCell {
     let values = match job.folder.join(&item.name) {
         Ok(place) => read_cells(job, item, &place, ctx),
@@ -160,7 +161,15 @@ fn read_cells(
 ) -> Vec<(String, String)> {
     let provider = match job.registry.resolve(place) {
         Ok(provider) => provider,
-        Err(_) => return Vec::new(),
+        // Every cell says why, rather than "reading" for good.
+        Err(error) => {
+            let words = Cell::Unavailable(error.to_string()).words();
+            return item
+                .keys
+                .iter()
+                .map(|key| (key.clone(), words.clone()))
+                .collect();
+        }
     };
     let entry = item.entry();
     let request = ReadRequest {
@@ -179,13 +188,36 @@ fn read_cells(
     costs.sort();
     costs.dedup();
     let limits = ReadLimits::default();
-    let mut outcomes: Vec<Outcome> = Vec::new();
-    for cost in costs {
-        outcomes.extend(
-            job.pipeline
-                .read(provider.as_ref(), &request, cost, &limits, ctx),
-        );
+    let read_all = || {
+        let mut outcomes: Vec<Outcome> = Vec::new();
+        for cost in &costs {
+            outcomes.extend(
+                job.pipeline
+                    .read(provider.as_ref(), &request, *cost, &limits, ctx),
+            );
+        }
+        outcomes
+    };
+    let mut outcomes = read_all();
+    // A reader the guard refused as busy is asked again once the guard
+    // has room, as meta's guard expects of its callers: no later read
+    // comes for a file whose cells came back unread, so its row would say
+    // "reading" for good (CI run 43373763659). A slot frees within a
+    // read's deadline, since a reader past it stops at its next read.
+    let mut tries = 1;
+    while refused(&outcomes)
+        && tries < BUSY_TRIES
+        && job.running()
+        && job
+            .pipeline
+            .guard()
+            .wait_for_room(limits.deadline.saturating_mul(2))
+    {
+        outcomes = read_all();
+        tries += 1;
     }
+    // Still refused: the cells say so in words.
+    let gave_up = refused(&outcomes) && job.running();
     // The extended items (the origin row, the streams) are read beside the
     // readers, as the details read them.
     if item
@@ -206,9 +238,30 @@ fn read_cells(
                 Some(field) => crate::photos::cell(field, &job.pipeline, &outcomes),
                 None => cell_words(job.pipeline.cell(key, &outcomes)),
             };
+            let words = match words {
+                None if gave_up => Some(busy_words()),
+                words => words,
+            };
             words.map(|w| (key.clone(), w))
         })
         .collect()
+}
+
+/// How many times a file is read while the guard refuses a reader as
+/// busy: the first read, and each after the guard had room.
+const BUSY_TRIES: usize = 3;
+
+/// Whether the guard refused a reader as busy.
+fn refused(outcomes: &[Outcome]) -> bool {
+    outcomes
+        .iter()
+        .any(|(_, result)| matches!(result, Err(MetaError::Busy)))
+}
+
+/// The words of a cell whose reader the guard refused at every try:
+/// "unavailable: busy with an earlier file", the state first.
+fn busy_words() -> String {
+    Cell::Unavailable(MetaError::Busy.to_string()).words()
 }
 
 /// A cell's words as an entry keeps them: the value; empty for a file
@@ -331,5 +384,92 @@ mod tests {
         assert_eq!(of("f199.txt"), [("text.lines".to_owned(), "3".to_owned())]);
         // No reader takes it: its cell is empty, and the row leaves it out.
         assert_eq!(of("data.bin"), [("text.lines".to_owned(), String::new())]);
+    }
+
+    /// One file read through a pipeline whose guard has a single slot,
+    /// held by another reader until `release` is called: the cells the
+    /// read sends.
+    fn read_with_the_slot_held(release_first: bool) -> Vec<(String, String)> {
+        let fake = FakeProvider::new();
+        let folder = p("/work");
+        fake.add_folder(&folder);
+        fake.add_file(&folder.join("f.txt").unwrap(), b"one\ntwo\nthree\n");
+        let mut registry = Registry::new();
+        registry.set_local(Arc::new(fake.clone()));
+        let mut runtime = Runtime::new(Arc::new(registry));
+        let pipeline = Arc::new(Pipeline::builtin().with_guard(diroxide_meta::Guard::new(1)));
+        // Another reader holds the only slot.
+        let (started, has_started) = std::sync::mpsc::channel::<()>();
+        let (hold, wait) = std::sync::mpsc::channel::<()>();
+        let guard = pipeline.guard().clone();
+        let holder = std::thread::spawn(move || {
+            guard.run(Duration::from_secs(60), move || {
+                let _ = started.send(());
+                let _ = wait.recv_timeout(Duration::from_secs(60));
+                Ok(())
+            })
+        });
+        has_started.recv().unwrap();
+        runtime.request(Request::ReadColumns {
+            side: Side::Left,
+            listing: 1,
+            folder: folder.clone(),
+            items: vec![item(0, "f.txt")],
+            urgent: 1,
+            costs: vec![("text.lines".into(), Cost::OnDemand)],
+            pipeline: SharedPipeline(pipeline),
+            ask: 1,
+        });
+        if release_first {
+            hold.send(()).unwrap();
+        }
+        let mut cells = Vec::new();
+        loop {
+            let events = runtime.settle();
+            if events.is_empty() {
+                break;
+            }
+            for event in events {
+                if let AppEvent::ColumnsRead { cells: got, .. } = event {
+                    cells.extend(got);
+                }
+            }
+        }
+        let _ = hold.send(());
+        assert_eq!(holder.join().unwrap(), Ok(()));
+        assert_eq!(cells.len(), 1, "{cells:?}");
+        cells.remove(0).values
+    }
+
+    /// Lane PC (CI run 43373763659): a file whose reader the guard
+    /// refused as busy is read again when the guard has room, so its cell
+    /// fills; it is never sent back unread, which left the row saying
+    /// "reading" for good, since no later read comes for it.
+    #[test]
+    fn a_reader_refused_as_busy_is_asked_again_when_there_is_room() {
+        assert_eq!(
+            read_with_the_slot_held(true),
+            [("text.lines".to_owned(), "3".to_owned())]
+        );
+    }
+
+    /// Lane PC: a slot held past every try leaves the cell in words, the
+    /// state first ("lines unavailable", 17 cells, in the row), never
+    /// "reading".
+    #[test]
+    fn a_reader_refused_at_every_try_says_so() {
+        let values = read_with_the_slot_held(false);
+        assert_eq!(
+            values,
+            [(
+                "text.lines".to_owned(),
+                "unavailable: busy with an earlier file".to_owned()
+            )]
+        );
+        assert_eq!(busy_words(), "unavailable: busy with an earlier file");
+        assert!(diroxide_core::format::within_cells(
+            &format!("lines {}", busy_words()),
+            "lines unavailable"
+        ));
     }
 }
