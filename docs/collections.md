@@ -23,7 +23,15 @@ Each row names the file first, then where it is, then its size: "report.pdf, in 
 
 Choose Flat view again, in the View menu or the palette, to turn it off: "Flat view off. work."
 
-Copying or moving out of a flat view, and a filter that matches the folder text, are in [limits](#limits) below.
+The refining filter you type in the list matches the folder words too, so typing `q3` finds files in a folder named q3.
+
+### Copy and move out of a flat view
+
+Copy or Move from a flat view asks a question first, and it starts on the safer answer: "Keep folders, or all in one folder?". Its two rows are "Keep folders, as below the flat view" and "All in one folder; taken names asked".
+
+- Keep folders puts each file in the same folder below the destination as it had below the flat view's folder. It works for a Move one folder level down. Copy says "Keep folders is for Move only, for now." and a file deeper than one level says "Keep folders: one folder level, for now."
+- All in one folder puts every file in the destination folder. A name that is taken is asked about, never overwritten in silence.
+- Escape says "Nothing moved." or "Nothing copied."
 
 ## Collections
 
@@ -36,7 +44,7 @@ Collections are kept as files in the `saved` folder of the state folder, one TOM
 - Save as collection saves the marked entries of the panel as a collection. It asks for a name, "Collection name for 2 items", with the field empty. An empty name says "A collection needs a name." With nothing marked: "Nothing to save: mark entries first."
 - Collect adds the marked entries, or the focused one when none are marked, to the collection named "Collected". "Added 1 to Collected." A place that was already there is counted apart: "Added 0 to Collected. 1 was there already."
 
-Both are in the File menu and in the palette. Neither has a key by default. [Customizing keys](customizing-keys.md) says how to give them one.
+Both are in the File menu and in the palette. They work from a list too: with a results list open, the palette, the menus and the list's Actions reach the places of the list on the screen, and the list stays open after you name a collection. Neither has a key by default. [Customizing keys](customizing-keys.md) says how to give them one.
 
 ### Open one
 
@@ -49,7 +57,7 @@ The last two rows are "Rename a collection" and "Remove a collection".
 A collection's list has one row for each item, the name first and the folder after it. All the items are checked when it opens. A file that is gone says so after its name: "report.pdf, gone since this list was made". The title says how many are gone: "1 of 2 items gone from Trip photos."
 
 - Delete, the trash key, takes the item out of the collection and never touches the file: "Removed 1 from Trip photos. The file was not touched." For several: "Removed 3 from Trip photos. The files were not touched."
-- Remove missing items takes out every item whose file is gone. "Nothing missing in Trip photos." when there are none. It is in the palette, and no file is touched.
+- Remove missing items takes out every item whose file is gone. "Nothing missing in Trip photos." when there are none. It is in the palette, the menus and the list's Actions, and no file is touched.
 - Open a collection first: when you use Remove missing items outside one, "Open a collection first: Collections, in the Go menu."
 
 ### Rename and remove
@@ -65,12 +73,12 @@ A saved search is the live kind of collection. It stores what you typed and runs
 
 Recent files is in the Go menu (Alt+G, then Q) and in the palette. It lists the files you opened or edited from diroxide, newest first, at most 50. Its line comes first: "Recent: 2 files, newest one.txt, today". Each row names the file first, then what you did and when, then where it is: "one.txt, opened today, 10:00 AM, in ...".
 
-- A file is kept when you open it with Enter, or edit it with F4. F3, which views, never keeps a file.
+- A file is kept when you open it with Enter, or edit it with F4, in a panel or from inside a results list. F3, which views, never keeps a file.
 - Only the state folder keeps them, in `recent.toml`, on this computer. The setting Remember recent files, `recent_files`, turns it off. Then nothing is kept and the list is emptied: "Recent files are off in Settings."
 - Clear recent files forgets every one, in the palette: "Cleared 20 recent files." No file is touched.
 - With none: "Recent: no files".
 
-A file you open from inside a results list is not kept yet; [limits](#limits) has it.
+A file you open from inside a results list is kept too.
 
 ## diro -
 
@@ -86,21 +94,18 @@ find . -name "*.log" -print0 | diro -
 - The opening options work as they do for `diro [PATH]`, before or after the dash: `--portable`, `--tui`, `--gui`, `--no-plugins`, `--theme`.
 - It says first how many it read: "3 paths from standard input". Then it says each path it could not read, the word first: "Missing: gone.txt, in D:\old\place".
 
-In this build `diro -` prints those lines and the list as plain lines, one for each entry as `diro ls` says them, and opens nothing. Opening the list in the app is waiting on a later change; the line it will start with is "3 paths from standard input, 1 missing". `diro ls -` reads the same way.
+On a terminal, `diro -` opens the list in the app. The list is named "Standard input", and its first line is "3 paths from standard input, 1 missing". When its output is redirected, so there is no terminal to open, it prints the lines instead, one for each entry as `diro ls` says them. `--cwd-file` is not handled with `diro -` yet. `diro ls -` reads the same way.
 
 The exit codes are 0 when every path was read, 1 when none could be, or the list is too long, 2 for wrong use or separators that are not the ones asked for, and 3 when some could not be read.
 
 ## Limits
 
-- Save as collection and Collect work from the File menu and the palette over a panel. The menus and the palette close an open list before a command runs, so from a list they do not reach the list's places yet; use them from the panel for now.
-- Copy and move out of a flat view do not ask whether to keep the folders.
-- The refining filter in a flat view matches names, not the folder text after them.
-- A file opened from inside a results list is not kept in the recent files.
+- Keep folders works for a Move one folder level down. Copy and a deeper folder say "for now" (see [Copy and move out of a flat view](#copy-and-move-out-of-a-flat-view)).
 - A flat view's rows read "a.txt, in work/b/deep", with the folder as the list gives it.
 - The flat view's settings are not remembered from one time to the next.
 - A collection's items are all checked when it opens, which is slow for a very long one.
 - No command deletes a collection's file except Remove a collection, which sends it to the trash.
-- `diro -` does not open the list in the app yet.
+- `diro -` does not handle `--cwd-file`. After it opens, the panel's arrival line may be said after the list's start line.
 
 [Known limits](known-limits.md#lists-that-are-not-folders) keeps the list current.
 
