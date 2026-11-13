@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use diroxide_app::keymap::Platform;
 use diroxide_app::{App, AppOptions, Runtime};
-use diroxide_core::{Key, Message, Place, Side};
+use diroxide_core::{Key, KeyCode, Message, Place, Side};
 use diroxide_gui::frontend::{self, Frontend, Host};
 use diroxide_gui::keys;
 use diroxide_gui::widgets::root::Root;
@@ -184,10 +184,7 @@ impl Rig {
     /// Types text into the open field, one key at a time.
     pub fn type_text(&mut self, text: &str) {
         for c in text.chars() {
-            let key = Key::new(
-                diroxide_core::KeyCode::Char(c),
-                diroxide_core::Modifiers::NONE,
-            );
+            let key = Key::new(KeyCode::Char(c), diroxide_core::Modifiers::NONE);
             self.press_key(&key);
         }
     }
@@ -497,10 +494,11 @@ impl Rig {
 /// chord) as the window's keymap means it on this system: on macOS the
 /// GUI column's Control chords are Command chords
 /// (`Keymap::for_platform`), so the same test presses Command+Shift+P
-/// there, as a person on a Mac would.
+/// there, as a person on a Mac would. Ctrl+Tab and Ctrl+Shift+Tab stay on
+/// Control, as the keymap keeps them: Command+Tab switches apps there.
 pub fn on_this_system(key: &Key) -> Key {
     let mut key = *key;
-    if Platform::current() == Platform::MacOs && key.mods.ctrl {
+    if Platform::current() == Platform::MacOs && key.mods.ctrl && key.code != KeyCode::Tab {
         key.mods.ctrl = false;
         key.mods.meta = true;
     }
