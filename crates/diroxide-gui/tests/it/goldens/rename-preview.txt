@@ -3,6 +3,7 @@ Window "work - diroxide"
     GenericContainer ""
       GenericContainer ""
         Label "work, 8 items, in <dir>" live=polite
+        Label "No file would change." live=polite
       Dialog "1 of 2 files will change. No problems."
         GenericContainer ""
           Label "Enter on a row: edit its name, skip it, or hear both names. Escape goes back to the rules."

@@ -760,7 +760,7 @@ impl Frontend {
         // The start's lines, said before the window existed, wait in the
         // live region for a screen reader to ask for the tree, as one
         // announcement in their order.
-        let held = self.take_to_say(None);
+        let held = self.take_to_say(None, None);
         let announcer =
             NewWidget::new(Announcer::new(std::rc::Rc::clone(&full_passes)).with_pending(held))
                 .with_tag(ANNOUNCER);
@@ -1890,14 +1890,34 @@ impl Frontend {
     /// shown for the first time (`fresh`), the line the app said as it
     /// opened it is left out when the dialog says the same by itself (its
     /// name, then its focused control, as the focus moves into it), so
-    /// the screen reader hears it once: the settled double.
-    fn take_to_say(&mut self, fresh: Option<&model::DialogView>) -> Vec<Message> {
+    /// the screen reader hears it once: the settled double. When the
+    /// focused row's words changed in place (`renamed`, its new name), no
+    /// focus event says them, so the app's quiet line for that row (said
+    /// low, as the terminal's focus echo) is said once here.
+    fn take_to_say(
+        &mut self,
+        fresh: Option<&model::DialogView>,
+        renamed: Option<&str>,
+    ) -> Vec<Message> {
+        let mut promoted = false;
         let lines: Vec<(Message, bool)> = std::mem::take(&mut self.to_say)
             .into_iter()
             .filter(|said| {
                 !(said.opening && fresh.is_some_and(|view| view.says(&said.message.text)))
             })
-            .map(|said| (said.message, said.start))
+            .map(|said| {
+                let mut message = said.message;
+                if let Some(name) = renamed
+                    && !promoted
+                    && message.importance == diroxide_core::Importance::Low
+                    && !message.text.is_empty()
+                    && name.starts_with(message.text.as_str())
+                {
+                    message.importance = diroxide_core::Importance::Normal;
+                    promoted = true;
+                }
+                (message, said.start)
+            })
             .collect();
         let joined = model::join_messages(&lines);
         self.spoken.extend(joined.iter().cloned());
@@ -2063,7 +2083,11 @@ impl Frontend {
                     .is_none_or(|shown| shown.id != view.id)
             })
             .cloned();
-        let say = self.take_to_say(fresh.as_ref());
+        let renamed = match (&dialog, &self.shown.dialog) {
+            (Some(now), Some(before)) => now.renamed_from(before).map(str::to_owned),
+            _ => None,
+        };
+        let say = self.take_to_say(fresh.as_ref(), renamed.as_deref());
         if dialog != self.shown.dialog {
             self.shown.dialog = dialog.clone();
             host.edit(ROOT, |mut root| Root::set_dialog(&mut root, dialog));

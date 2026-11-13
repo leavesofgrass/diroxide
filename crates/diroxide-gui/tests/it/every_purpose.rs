@@ -2182,6 +2182,130 @@ fn a_changed_row_is_said_once() {
     assert_eq!(left.len(), 1, "{heard:?}");
 }
 
+/// Presses `key` and checks the row's new words are heard once: through
+/// the live region (`line`), or through the focus when the app reopens
+/// the list with the focus on the changed row (`row`), never both and
+/// never twice.
+/// The focused node's id, as a debug string (a new node is a focus
+/// event a screen reader follows).
+fn focus_id(rig: &Rig) -> String {
+    let state = rig.h.access_tree().state();
+    let focused = state.focus_in_tree();
+    format!("{:?}", focused.active_descendant().unwrap_or(focused).id())
+}
+
+fn heard_once(rig: &mut Rig, key: &str, line: &str, row: &str) {
+    let before = rig.spoken().len();
+    let shown = rig.f.app().dialog().map(|(id, _)| id);
+    let node = focus_id(rig);
+    rig.press(key);
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    let live = heard.iter().filter(|s| s.contains(line)).count();
+    let (_, focused) = rig.focus_node();
+    let reopened = rig.f.app().dialog().map(|(id, _)| id) != shown;
+    let moved = reopened || focus_id(rig) != node;
+    let by_focus = usize::from(moved && focused.starts_with(row));
+    assert_eq!(
+        live + by_focus,
+        1,
+        "{key}: heard {heard:?}, focus {focused:?}, reopened {reopened}"
+    );
+    assert!(
+        focused.starts_with(row),
+        "{key}: the focus is on {focused:?}"
+    );
+}
+
+/// Space, now that lane AS wired it, changes a row in place and the
+/// change is heard once (R34's commit 34): a copy in the duplicates'
+/// copies list, a row of the synchronize plan, a row of the rename
+/// preview, each twice so it goes and comes back.
+#[test]
+fn space_on_a_row_is_said_once() {
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-space-")
+        .tempdir()
+        .unwrap();
+    let mut rig = dups_groups(root.path());
+    choose(&mut rig, "Group 1");
+    rig.press("home");
+    rig.press("down");
+    heard_once(
+        &mut rig,
+        "space",
+        "Marked copy-two.txt",
+        "Marked: copy-two.txt",
+    );
+    heard_once(&mut rig, "space", "Kept copy-two.txt", "Kept: copy-two.txt");
+    // The last kept copy stays, said in words.
+    rig.press("home");
+    let before = rig.spoken().len();
+    rig.press("space");
+    rig.press("down");
+    rig.press("space");
+    assert!(
+        rig.spoken()[before..]
+            .iter()
+            .any(|s| s.contains("One copy must stay.")),
+        "{:?}",
+        rig.spoken()
+    );
+
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-space-")
+        .tempdir()
+        .unwrap();
+    let mut rig = sync_plan(root.path());
+    focus_dialog_row_starting(&mut rig, "Copy there: a.txt");
+    heard_once(
+        &mut rig,
+        "space",
+        "Left out: a.txt, would copy there",
+        "Left out: a.txt",
+    );
+    heard_once(&mut rig, "space", "Copy there: a.txt", "Copy there: a.txt");
+
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-space-")
+        .tempdir()
+        .unwrap();
+    let mut rig = rename_with_rule(root.path());
+    answer(&mut rig, "count");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("RenamePreview"));
+    rig.press("home");
+    heard_once(
+        &mut rig,
+        "space",
+        "Skipped by you: a.txt",
+        "Skipped by you: a.txt",
+    );
+    heard_once(
+        &mut rig,
+        "space",
+        "a.txt becomes c.txt",
+        "a.txt becomes c.txt",
+    );
+}
+
+/// Moves the open list's focus to the row whose name starts with
+/// `start`, by its keys, without choosing it.
+fn focus_dialog_row_starting(rig: &mut Rig, start: &str) {
+    let names: Vec<String> = rig
+        .dialog_walk()
+        .into_iter()
+        .filter(|(role, _)| *role == Role::ListBoxOption)
+        .map(|(_, name)| name)
+        .collect();
+    let at = names
+        .iter()
+        .position(|n| n.starts_with(start))
+        .unwrap_or_else(|| panic!("no row {start} in {names:?}"));
+    rig.press("home");
+    for _ in 0..at {
+        rig.press("down");
+    }
+}
+
 /// The parts the purposes are opened in, each its own test.
 const PARTS: usize = 6;
 
