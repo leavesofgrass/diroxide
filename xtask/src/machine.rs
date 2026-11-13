@@ -162,33 +162,51 @@ pub fn this_machine(folder: &Path) -> Machine {
 /// The versions of this build: the workspace's version, the commit of
 /// `root`, and the compiler that `root`'s toolchain file names.
 pub fn these_versions(root: &Path) -> Versions {
-    let commit =
-        output_of(
-            Command::new("git")
-                .current_dir(root)
-                .args(["rev-parse", "--short=7", "HEAD"]),
-        )
-        .map(|hash| {
-            let changed = output_of(Command::new("git").current_dir(root).args([
-                "status",
-                "--porcelain",
-                "--untracked-files=no",
-            ]))
-            .is_some();
-            if changed {
-                format!("{hash} with changes")
-            } else {
-                hash
-            }
-        })
-        .unwrap_or_else(|| "unknown".to_owned());
-    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let hash = commit_hash(root);
+    let changed = hash.is_some() && has_changes(root);
     Versions {
         diroxide: env!("CARGO_PKG_VERSION").to_owned(),
-        commit,
-        rustc: output_of(Command::new(rustc).current_dir(root).arg("--version"))
-            .unwrap_or_else(|| "unknown".to_owned()),
+        commit: commit_words(hash, changed),
+        rustc: rustc_version(root),
     }
+}
+
+/// The short hash of `root`'s commit, when git answers.
+fn commit_hash(root: &Path) -> Option<String> {
+    output_of(
+        Command::new("git")
+            .current_dir(root)
+            .args(["rev-parse", "--short=7", "HEAD"]),
+    )
+}
+
+/// Whether `root`'s tracked files differ from its commit. Git may read
+/// every tracked file again to answer (a Windows tree mounted in a
+/// container makes it do so), which takes minutes on a busy share.
+fn has_changes(root: &Path) -> bool {
+    output_of(Command::new("git").current_dir(root).args([
+        "status",
+        "--porcelain",
+        "--untracked-files=no",
+    ]))
+    .is_some()
+}
+
+/// The commit in words: the hash, "with changes" after it when the
+/// tracked files differed, "unknown" when git did not answer.
+fn commit_words(hash: Option<String>, changed: bool) -> String {
+    match hash {
+        Some(hash) if changed => format!("{hash} with changes"),
+        Some(hash) => hash,
+        None => "unknown".to_owned(),
+    }
+}
+
+/// The compiler `root`'s toolchain file names: "rustc 1.96.0 (...)".
+fn rustc_version(root: &Path) -> String {
+    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    output_of(Command::new(rustc).current_dir(root).arg("--version"))
+        .unwrap_or_else(|| "unknown".to_owned())
 }
 
 /// The machine in one line, its processor first: "AMD Ryzen 5 5600G with
@@ -244,11 +262,27 @@ mod tests {
 
     #[test]
     fn the_versions_name_the_workspace_and_the_compiler() {
+        // The parts, without the whole-tree status: on a Windows tree
+        // mounted in the development container git reads every tracked
+        // file again for it, minutes on a busy share, and that is the
+        // machine's cost and not this code's.
         let root = crate::bench::workspace_root().unwrap();
-        let versions = these_versions(&root);
+        let versions = Versions {
+            diroxide: env!("CARGO_PKG_VERSION").to_owned(),
+            commit: commit_words(commit_hash(&root), false),
+            rustc: rustc_version(&root),
+        };
         assert_eq!(versions.diroxide, env!("CARGO_PKG_VERSION"));
         assert!(versions.rustc.starts_with("rustc "), "{}", versions.rustc);
         assert!(!versions.commit.is_empty());
         assert!(versions_words(&versions).starts_with("diroxide "));
+    }
+
+    #[test]
+    fn the_commit_says_its_changes_in_words() {
+        let hash = || Some("44062eb".to_owned());
+        assert_eq!(commit_words(hash(), false), "44062eb");
+        assert_eq!(commit_words(hash(), true), "44062eb with changes");
+        assert_eq!(commit_words(None, true), "unknown");
     }
 }
