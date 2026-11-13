@@ -25,10 +25,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use diroxide_config::RecentAction;
 use diroxide_core::format::{count, grouped};
 use diroxide_core::names::{display_name, spell_out};
-use diroxide_core::{Command, CommandId, EntryKind, ListModel, ListRow, Message, Place, Side};
+use diroxide_core::{Command, CommandId, ListModel, ListRow, Message, Place, Side};
 use diroxide_search::{FlatOptions, SearchHit};
 
 use super::searching::{ListKind, ListOpen};
@@ -159,13 +158,9 @@ fn said_name(name: &str) -> String {
 
 impl App {
     /// The commands of the flat view, collections and recent files;
-    /// `None` for any other. Enter and F4 on a file pass through here
-    /// first, to be kept in the recent files, and go on.
+    /// `None` for any other. Files opened with Enter and F4 are kept in
+    /// the recent files by the hook after every event (`keep_recent`).
     pub(super) fn lists_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
-        if command.id == ids::ENTER || command.id == ids::EDIT {
-            self.note_recent(&command.id);
-            return None;
-        }
         let action = route(&command.id)?;
         Some(match action {
             Do::Flat => self.flat_view_toggle(command),
@@ -645,34 +640,6 @@ impl App {
             }
             ListsNote::Say(message) => vec![self.say(message)],
         }
-    }
-
-    /// Enter or F4 on a file in a panel: kept in the recent files while
-    /// the setting is on; a folder, an archive opened as a folder, a
-    /// plugin's row and a name that is not Unicode are not. F3 (view) is
-    /// never kept (question 138).
-    fn note_recent(&mut self, id: &CommandId) {
-        if !self.settings.recent_files || !self.dialogs.is_empty() {
-            return;
-        }
-        let panel = self.panel(self.active);
-        let (Some(entry), Some(place)) = (panel.focused_entry(), panel.focused_place()) else {
-            return;
-        };
-        if entry.is_folder_like()
-            || entry.is_container()
-            || matches!(entry.kind, EntryKind::Item | EntryKind::Archive)
-            || entry.name_not_unicode
-        {
-            return;
-        }
-        let action = if *id == ids::EDIT {
-            RecentAction::Edited
-        } else {
-            RecentAction::Opened
-        };
-        let now = self.now();
-        self.lists_ask(ListsAsk::Record { place, action, now });
     }
 }
 

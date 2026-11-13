@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::Path;
 
-use diroxide_config::Paths;
+use diroxide_config::{Paths, RecentAction};
 use diroxide_core::{FixedClock, Key, Timestamp, UtcOffset};
 
 use super::*;
@@ -105,6 +105,19 @@ fn close(app: &mut App, runtime: &mut Runtime) {
         let effects = app.dialog_escape();
         settle(app, runtime, effects);
     }
+}
+
+/// Presses a key and keeps only the recent-file asks it made; every
+/// other request and effect is dropped, so no editor or program starts.
+fn press_keeping(app: &mut App, text: &str) -> Vec<ListsAsk> {
+    let _ = app.handle(AppEvent::Key(Key::parse(text).unwrap()));
+    app.requests
+        .drain(..)
+        .filter_map(|request| match request {
+            Request::Lists(ask) => Some(*ask),
+            _ => None,
+        })
+        .collect()
 }
 
 fn cells(line: &str) -> usize {
@@ -385,35 +398,44 @@ fn recent_files_are_kept_listed_newest_first_and_cleared() {
     // F4 on a file asks for it to be kept; the editor is not started
     // here, only the ask is made.
     focus(&mut app, "a.txt");
-    app.note_recent(&ids::EDIT);
-    focus(&mut app, "b");
-    app.note_recent(&ids::ENTER);
-    let asks: Vec<ListsAsk> = app
-        .requests
-        .drain(..)
-        .filter_map(|request| match request {
-            Request::Lists(ask) => Some(*ask),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(asks.len(), 1, "a folder is never kept: {asks:?}");
-    let effects = Vec::new();
+    let asks = press_keeping(&mut app, "f4");
+    assert_eq!(asks.len(), 1, "{asks:?}");
+    assert!(matches!(
+        &asks[0],
+        ListsAsk::Record {
+            action: RecentAction::Edited,
+            ..
+        }
+    ));
     for ask in asks {
         app.lists_ask(ask);
     }
-    settle(&mut app, &mut runtime, effects);
-    let now = app.now();
+    settle(&mut app, &mut runtime, Vec::new());
+
+    // Enter on a file in a list from diro - is kept too: the program is
+    // not started here.
     let one = fixture.root.join("b").unwrap().join("one.txt").unwrap();
-    app.lists_ask(ListsAsk::Record {
-        place: one,
-        action: RecentAction::Opened,
-        now,
-    });
+    let effects = app.open_place_list("Standard input", "1 path from standard input", vec![one]);
+    settle(&mut app, &mut runtime, effects);
+    let asks = press_keeping(&mut app, "enter");
+    assert_eq!(asks.len(), 1, "{asks:?}");
+    assert!(matches!(
+        &asks[0],
+        ListsAsk::Record {
+            action: RecentAction::Opened,
+            ..
+        }
+    ));
+    close(&mut app, &mut runtime);
+    for ask in asks {
+        app.lists_ask(ask);
+    }
     settle(&mut app, &mut runtime, Vec::new());
 
     let said = run(&mut app, &mut runtime, ids::RECENT_FILES);
     let start = "Recent: 2 files, newest one.txt, today";
-    assert_eq!(said, [start]);
+    // The list from diro - was there first, once this session.
+    assert_eq!(said, [start, "Replaces the search results."]);
     assert!(cells(start) <= 40);
     let rows = top_rows(&app);
     assert_eq!(rows[0].label, "one.txt");
@@ -427,6 +449,11 @@ fn recent_files_are_kept_listed_newest_first_and_cleared() {
     close(&mut app, &mut runtime);
     let said = run(&mut app, &mut runtime, ids::RECENT_FILES);
     assert_eq!(said, ["Recent: no files."]);
+    close(&mut app, &mut runtime);
+
+    // F3 views a file and is never kept (question 138).
+    focus(&mut app, "a.txt");
+    assert!(press_keeping(&mut app, "f3").is_empty(), "F3 is never kept");
 }
 
 #[test]
@@ -435,9 +462,8 @@ fn recent_files_off_keeps_nothing_and_says_so() {
     let (mut app, mut runtime) = started(&fixture);
     app.settings.recent_files = false;
     focus(&mut app, "a.txt");
-    app.note_recent(&ids::EDIT);
     assert!(
-        !app.requests.iter().any(|r| matches!(r, Request::Lists(_))),
+        press_keeping(&mut app, "f4").is_empty(),
         "nothing kept while the setting is off"
     );
     let said = run(&mut app, &mut runtime, ids::RECENT_FILES);

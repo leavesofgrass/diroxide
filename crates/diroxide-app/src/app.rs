@@ -1937,7 +1937,10 @@ impl App {
     /// [`Effect::AppRequests`], where [`Runtime::carry_out`](crate::Runtime::carry_out)
     /// takes them.
     pub fn handle(&mut self, event: AppEvent) -> Vec<Effect> {
+        let waiting = self.requests.len();
         let mut effects = self.handle_event(event);
+        // A file opened or edited from diroxide joins the recent files.
+        self.keep_recent(&effects, waiting);
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
         self.note_job_tabs();
