@@ -478,6 +478,13 @@ fn rules_change_move_and_go_and_the_counter_is_typed() {
     // A template with a placeholder chosen from the list.
     f.enter("add");
     f.enter("template");
+    // Metadata placeholders are not offered in this alpha (lane AS).
+    assert!(
+        !f.rows().iter().any(|row| row.contains("{meta:")),
+        "{:?}",
+        f.rows()
+    );
+    assert!(f.rows().iter().any(|row| row.starts_with("{stem}: ")));
     let said = f.enter("{counter}");
     assert_eq!(said[0], "Template: {counter}");
     f.answer("pic-{counter}");
