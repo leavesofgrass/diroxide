@@ -158,10 +158,6 @@ pub(super) enum Wants {
     Tabs(super::tabbing::TabWants),
     /// The dialogs of batch rename (alpha 5, lane RA; reserved by lane
     /// P5), hosted here for the same reason.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Rename(super::renaming::RenameWants),
     /// The dialogs of compare folders and synchronize (alpha 5, lane SA;
     /// reserved by lane P5).
