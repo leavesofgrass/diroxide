@@ -590,6 +590,31 @@ fn a_list_of_places_opens_in_the_lister_for_diro_dash() {
     assert_eq!(said, ["3 paths from standard input: nothing to list."]);
 }
 
+/// `diro -` asks for its list before the frontend starts the app; the
+/// start opens it over the panels (lane AS).
+#[test]
+fn a_list_asked_for_at_start_opens_after_the_panels() {
+    let fixture = fixture();
+    let mut options = AppOptions::new(fixture.root.clone(), fixture.root.clone());
+    options.settings.dialog_settle_ms = 0;
+    let mut app = App::new(options);
+    let paths = Paths::new(fixture.state.join("config"), fixture.state.clone());
+    let mut runtime = Runtime::with_local().with_paths(paths);
+    let places = vec![
+        fixture.root.join("a.txt").unwrap(),
+        fixture.root.join("b").unwrap(),
+        fixture.root.join("gone.txt").unwrap(),
+    ];
+    app.open_place_list_at_start("Standard input", "3 paths from standard input", places);
+    let start = app.start();
+    let said = settle(&mut app, &mut runtime, start);
+    let line = "3 paths from standard input, 1 missing";
+    assert!(said.iter().any(|s| s == line), "{said:?}");
+    assert_eq!(cells(line), 38);
+    assert!(app.results_shown());
+    assert_eq!(top_rows(&app).len(), 3);
+}
+
 #[test]
 fn save_as_collection_keeps_the_list_on_the_screen() {
     let fixture = fixture();

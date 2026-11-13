@@ -147,6 +147,9 @@ pub(super) struct SearchState {
     last: Option<(String, SearchQuery)>,
     /// "Replaces the search results." was said once this session.
     replaced_said: bool,
+    /// A list of places to open once the app starts (`diro -`): its
+    /// title, its start line and its places.
+    at_start: Option<(String, String, Vec<Place>)>,
 }
 
 /// A search command of this module.
@@ -2055,6 +2058,23 @@ impl App {
     )]
     pub(crate) fn list_owner(&self) -> Option<(Side, u64)> {
         self.searching.current.as_ref()?.owner
+    }
+
+    /// Asks for a list of places to open in the results lister as soon
+    /// as [`App::start`] runs, after the panels: `diro -`'s way in, since
+    /// each frontend starts the app itself. `title` names the list,
+    /// `start` is said as it opens, its count first ("3 paths from
+    /// standard input"), as [`App::open_place_list`] takes them.
+    pub fn open_place_list_at_start(&mut self, title: &str, start: &str, places: Vec<Place>) {
+        self.searching.at_start = Some((title.to_owned(), start.to_owned(), places));
+    }
+
+    /// The list asked for at start, opened now (lane AS).
+    pub(super) fn start_place_list(&mut self) -> Vec<Effect> {
+        match self.searching.at_start.take() {
+            Some((title, start, places)) => self.open_place_list(&title, &start, places),
+            None => Vec::new(),
+        }
     }
 
     /// The places of the list on the screen (alpha 5, lane AS): its marked

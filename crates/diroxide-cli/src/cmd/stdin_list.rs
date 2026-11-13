@@ -13,26 +13,33 @@
 //!   `--no-plugins`, `--theme` and the rest) are taken as `diro [PATH]`
 //!   takes them, before or after the `-`; they apply when the list opens
 //!   in the app.
-//! - **Where the list goes.** Until the app's one entry point for a list
-//!   of places lands (P5's general results lister, LA's collection
-//!   lister), the places are said as plain lines, one entry a line in
-//!   `diro ls`'s words, and nothing opens. Keys would still reach the
+//! - **Where the list goes.** On a terminal the list opens in the app's
+//!   results lister after the start, "3 paths from standard input, 1
+//!   missing" (lane AS, through `App::open_place_list_at_start`), in the
+//!   window or the full screen as `diro` chooses. Keys reach the
 //!   terminal frontend with a pipe on standard input: crossterm reads the
 //!   console (`CONIN$`) on Windows and `/dev/tty` on Linux and macOS, so
-//!   the screen can open after the pipe is read (spike X1).
+//!   the screen opens after the pipe is read (spike X1). When standard
+//!   output is not a terminal, the places are said as plain lines, one
+//!   entry a line in `diro ls`'s words, and nothing opens.
 //!
 //! Exit codes: 0 every path read; 1 none could be read, or the list is
 //! too long; 2 wrong use, or a list whose separators are not the ones
 //! asked for; 3 some could not be read.
 
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write};
 
-use diroxide_core::Place;
+use diroxide_config::Paths;
+use diroxide_core::{KeyColumn, Place};
 use diroxide_search::{PathLimits, PathListError, PathSeparator, read_path_list};
+use diroxide_tui::{Files, Tui, TuiOptions};
 use diroxide_vfs::{OpContext, Registry};
 
 use crate::cmd::archive::{line, lines};
-use crate::open::{OpenOptions, current_place};
+use crate::open::{
+    Frontend, FrontendInputs, OpenOptions, TERMINAL_LOG, build, build_for, choose_frontend,
+    current_place, display_present, graphics_api, gui_failed_sentence, remote_session,
+};
 use crate::{CliError, parse_open};
 
 /// `diro -`'s arguments.
@@ -87,16 +94,123 @@ pub fn parse(args: &[String]) -> Result<StdinListArgs, CliError> {
     })
 }
 
-/// Runs `diro -` over this computer's places.
+/// The list's name in the app.
+pub const TITLE: &str = "Standard input";
+
+/// Runs `diro -` over this computer's places: on a terminal the list
+/// opens in the app (the window or the full screen, as `diro` chooses);
+/// when standard output is not a terminal its lines are printed.
 pub fn run(
     args: &StdinListArgs,
     input: &mut dyn Read,
     out: &mut dyn Write,
 ) -> Result<i32, CliError> {
     let here = current_place()?;
+    if std::io::stdout().is_terminal() {
+        return open_in_app(args, input, out, &here);
+    }
     let registry = crate::cmd::ls::providers();
     let clock = diroxide_app::startup::local_clock();
     run_with(args, input, out, &registry, &here, &clock)
+}
+
+/// Reads the list whole; `Err` carries the exit code once its lines are
+/// said.
+fn read_list(
+    args: &StdinListArgs,
+    input: &mut dyn Read,
+    out: &mut dyn Write,
+) -> Result<Result<diroxide_search::PathList, i32>, CliError> {
+    match read_path_list(input, args.separator, PathLimits::default()) {
+        Ok(list) => Ok(Ok(list)),
+        Err(PathListError::Read(e)) => Err(CliError::Failed(format!(
+            "standard input could not be read: {e}"
+        ))),
+        Err(error @ PathListError::TooLong(_)) => {
+            lines(out, &[error.to_string(), NOTHING_OPENED.to_owned()])?;
+            Ok(Err(1))
+        }
+        Err(error) => {
+            line(out, &error.to_string())?;
+            Ok(Err(2))
+        }
+    }
+}
+
+/// Opens the list in the app after the start (lane AS): the start line
+/// is the count, "3 paths from standard input", and the app adds ", 1
+/// missing" when it looks each place up. What could not be read is said
+/// before the screen opens.
+fn open_in_app(
+    args: &StdinListArgs,
+    input: &mut dyn Read,
+    out: &mut dyn Write,
+    here: &Place,
+) -> Result<i32, CliError> {
+    let list = match read_list(args, input, out)? {
+        Ok(list) => list,
+        Err(code) => return Ok(code),
+    };
+    if list.is_empty() {
+        line(out, "List is empty. Nothing to open.")?;
+        return Ok(0);
+    }
+    let read = list.places(here);
+    let start = read.words();
+    for (item, why) in &read.refused {
+        line(out, &format!("Could not read {}: {why}.", item.what()))?;
+    }
+    out.flush().map_err(|e| CliError::Failed(e.to_string()))?;
+    let options = &args.open;
+    let paths = crate::open::paths(options.portable);
+    let setting = paths
+        .as_ref()
+        .map(|p| diroxide_config::load(p).settings.frontend)
+        .unwrap_or_default();
+    let choice = choose_frontend(&FrontendInputs {
+        gui_flag: options.gui,
+        tui_flag: options.tui,
+        setting,
+        remote: remote_session(),
+        display: display_present(),
+        interactive: true,
+        gui_built: diroxide_gui::built(),
+    });
+    if let Some(notice) = &choice.notice {
+        line(out, notice)?;
+    }
+    if choice.frontend == Frontend::Gui {
+        let gui = diroxide_gui::GuiOptions {
+            background: options.background,
+            graphics: graphics_api(options.graphics, Default::default()),
+            log: options.log.as_ref().map(std::path::PathBuf::from),
+            ..diroxide_gui::GuiOptions::default()
+        };
+        diroxide_gui::prepare(&gui);
+        let registry = std::sync::Arc::new(Registry::with_local());
+        let (mut app, runtime) =
+            build_for(options, paths.as_ref(), here, registry, KeyColumn::Gui)?;
+        app.open_place_list_at_start(TITLE, &start, read.places.clone());
+        match diroxide_gui::run(app, runtime, gui) {
+            Ok(_) => return Ok(0),
+            Err(error) => line(out, &gui_failed_sentence(&error))?,
+        }
+    }
+    let (mut app, mut runtime) = build(options, paths.as_ref(), here)?;
+    app.open_place_list_at_start(TITLE, &start, read.places);
+    let files = Files {
+        themes: paths.as_ref().map(Paths::themes_dir),
+        log: paths.as_ref().map(|p| p.state_file(TERMINAL_LOG)),
+    };
+    let tui = TuiOptions {
+        screen_reader: app.screen_reader(),
+        inline: options.inline,
+        ..TuiOptions::default()
+    };
+    Tui::new(tui)
+        .run_terminal(&mut app, &mut runtime, &files)
+        .map_err(|e| CliError::Failed(e.to_string()))?;
+    Ok(0)
 }
 
 /// [`run`] with the providers, the current folder and the clock given.
@@ -108,21 +222,9 @@ pub fn run_with(
     here: &Place,
     clock: &dyn diroxide_core::Clock,
 ) -> Result<i32, CliError> {
-    let list = match read_path_list(input, args.separator, PathLimits::default()) {
+    let list = match read_list(args, input, out)? {
         Ok(list) => list,
-        Err(PathListError::Read(e)) => {
-            return Err(CliError::Failed(format!(
-                "standard input could not be read: {e}"
-            )));
-        }
-        Err(error @ PathListError::TooLong(_)) => {
-            lines(out, &[error.to_string(), NOTHING_OPENED.to_owned()])?;
-            return Ok(1);
-        }
-        Err(error) => {
-            line(out, &error.to_string())?;
-            return Ok(2);
-        }
+        Err(code) => return Ok(code),
     };
     if list.is_empty() {
         line(out, "List is empty. Nothing to open.")?;

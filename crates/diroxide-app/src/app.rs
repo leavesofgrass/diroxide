@@ -1511,6 +1511,8 @@ impl App {
             let focus = self.restored_focus(side);
             effects.extend(self.open(side, place, focus));
         }
+        // `diro -`: its list of places opens over the panels.
+        effects.extend(self.start_place_list());
         effects
     }
 
