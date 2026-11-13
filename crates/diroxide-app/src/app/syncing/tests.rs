@@ -280,6 +280,13 @@ fn the_plan_rows_start_with_their_action_and_a_row_can_change() {
     assert_eq!(said, [summary]);
     assert!(within_cells(summary, "Update the other panel: 2 to copy"));
     assert_eq!(top(&app), Some("SyncPlan"));
+    // The plan's title: the mode and the count first (lane AS).
+    let title = app
+        .dialogs
+        .last()
+        .map(|(_, d)| d.title())
+        .unwrap_or_default();
+    cells(&title, "Update the other panel: 2 changes", 33);
     let rows = labels(&app);
     let copy = "Copy there: plan.md, only here";
     cells(copy, copy, 30);

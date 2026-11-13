@@ -443,7 +443,15 @@ fn plan_list(view: &PlanView) -> ListModel {
     for (i, note) in plan.notes().into_iter().enumerate() {
         rows.push(ListRow::new(format!("n{i}"), note));
     }
-    let mut list = ListModel::new(plan.summary()).with_rows(rows);
+    // The title is the mode and the count, inside 40 cells: "Update the
+    // other panel: 2 changes" (33); the whole summary is said as the
+    // plan opens (lane AS).
+    let title = format!(
+        "{}: {}",
+        plan.mode.words(),
+        count(acting, "change", "changes")
+    );
+    let mut list = ListModel::new(title).with_rows(rows);
     list.set_help(
         "Enter on a row lists what can change on it. Synchronize now is after the rows; nothing changes before its question.",
     );
