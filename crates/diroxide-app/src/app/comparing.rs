@@ -382,7 +382,10 @@ impl App {
         self.start_compare(pair, options)
     }
 
-    fn start_compare(&mut self, pair: Pair, options: FileOptions) -> Vec<Effect> {
+    /// Starts a file compare: "Comparing notes.txt here with notes.txt
+    /// there". Compare folders' Enter on a Different row starts here too
+    /// (lane AS).
+    pub(super) fn start_compare(&mut self, pair: Pair, options: FileOptions) -> Vec<Effect> {
         let (before, after) = pair.names();
         let line = if pair.panels {
             format!("Comparing {after} here with {before} there")

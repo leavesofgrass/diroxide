@@ -236,7 +236,7 @@ fn enter_on_a_different_row_compares_the_two_files() {
     compared(&mut app, &mut runtime);
     let row = row_starting(&app, "Different, notes.txt");
     let said = enter(&mut app, &mut runtime, &row);
-    assert_eq!(said[0], "Comparing notes.txt here with the one there");
+    assert_eq!(said[0], "Comparing notes.txt here with notes.txt there");
     assert!(
         matches!(
             app.opens.last().map(|o| &o.purpose),

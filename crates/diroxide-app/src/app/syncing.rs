@@ -832,16 +832,15 @@ impl App {
         ) else {
             return Vec::new();
         };
-        let request = self.ids.request();
+        // The file compare's own start (lane AS), so its keys, the viewer
+        // at the change among them, have their files.
         let options = super::comparing::file_options(&self.settings);
-        let line = format!("Comparing {} here with the one there", compared.name());
-        self.request(Request::Sync(Box::new(SyncAsk::Files {
-            request,
+        let pair = super::comparing::Pair {
             before,
             after,
-            options,
-        })));
-        vec![self.say(Message::info(line))]
+            panels: true,
+        };
+        self.start_compare(pair, options)
     }
 
     /// The differing rows' files in the results lister, each with its
