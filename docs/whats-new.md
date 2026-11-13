@@ -4,7 +4,30 @@ This page says in plain words what each alpha added. [The changelog](../CHANGELO
 
 ## Alpha 5 (not released yet)
 
-This section was opened on Thursday, November 12, 2026, while alpha 5 is being built, and it lists what can be reached so far. Later guides for batch rename, comparing and synchronizing folders, duplicates, the flat view and collections, and the new command line commands arrive with their features. Nothing here has been heard on a screen reader or read on a Braille display.
+This section is for alpha 5, which has not been released. It lists what can be reached now: tabs, batch rename, comparing and synchronizing folders, duplicates, the flat view, collections and recent files, four new command line commands, and the follow-ups to alpha 4. Nothing here has been heard on a screen reader or read on a Braille display.
+
+### Batch rename
+
+- Batch rename renames the marked entries by rules, with a preview of every new name before anything changes. The preview is the plan: one row for each entry, problems first, each row starting with its state, "Problem, name taken: c.txt becomes taken.txt". The count line comes first: "2 problems. 46 of 50 files will change."
+- The rules replace text or a pattern, insert and remove by position, make a name from a template with a counter and dates, change case and tidy spaces. A pattern refuses look-around and a backreference in words, with the way round them. Passes chain, and presets keep a set of rules by name in `rename-presets.toml`.
+- Swaps, rings and a change of case only go through temporary names. A name already taken is a problem row, never an overwrite. The question starts on No, the folders are read again before it runs, and one Ctrl+Z puts every name back.
+- Edit names in editor opens the new names in your text editor, one a line, each with its old name in brackets so a moved line still finds its file.
+- F2 with several entries marked opens Batch rename. Rename one by one keeps the old stepping. `diro rename` is the same engine for a shell, with `--dry-run`. [Batch rename](rename.md) is the new guide.
+
+### Compare folders and synchronize
+
+- Compare folders says what differs between the panels' folders, by size and time (within two seconds), by size only, or by contents: "17 differences in 1,202 items: 12 only here, 3 only there, 2 different. 1,185 same." Rows say here and there, never left and right, and start with their status: "Only here, inner.txt, in sub".
+- Synchronize turns the result into a plan in five modes: update either panel, mirror to either panel, or both ways with the newer file winning. The plan is read before anything happens, a row can be left out or turned around, and the question starts on No. A replaced or removed file goes to the trash first, one Ctrl+Z undoes the run, and a file that changed after the compare is skipped.
+- `diro diff` compares two folders too, and `diro sync` synchronizes from a shell, with `--dry-run`. [Synchronize](synchronize.md) is the new guide, and [Compare files](compare.md) says what two folders do.
+
+### Duplicates
+
+- Find duplicates finds files with the same contents in this folder, the marked entries or both panels. It groups by size, then by the first and last blocks, then by a full BLAKE3 hash, and compares bytes on request. The groups read largest waste first: "1 group, 2 files, 11 bytes to free".
+- Five rules choose the copy to keep, and none marks a whole group. The only way out is the trash, after every kept and every marked copy is read again. `diro dups` prints the same groups and never removes anything. [Duplicates](duplicates.md) is the new guide.
+
+### Lists that are not folders
+
+- The flat view lists every file below a folder in one list. Collections keep named lists of places, and removing an item never touches its file. Saved searches run again when opened. Recent files lists what you opened or edited with Enter and F4. `diro -` makes a list from paths another program prints. [Flat view, collections and recent files](collections.md) is the new guide.
 
 ### Tabs
 
@@ -21,6 +44,8 @@ This section was opened on Thursday, November 12, 2026, while alpha 5 is being b
 
 ### Smaller changes
 
+- F4 no longer starts a second editor on a file that is still starting: "Editor already started on f1.txt". A Windows program with a window of its own is started through the system's shell on its full path, and console programs start as before. When diroxide finds textweaver, it is the default editor, after the `editor` setting and the VISUAL and EDITOR variables.
+- Encrypt with gpg, as text and Sign with gpg, as text make ASCII armor, `NAME.asc`. Move into month folders is planned by the engine, so a plugin's before-move hook runs for it. The duration and dimensions columns sort as numbers. Undo for removing a mark says "Undid mark removal: 1 item is back".
 - Refusing to write a RAR archive now says "RAR is read only in diroxide", shorter, so it fits a 40-cell Braille line whole.
 - A gpg key's passphrase is asked through the same hidden prompt as a locked file's, and still reads "Passphrase for key ending 4E7B (hidden):" in 40 cells.
 - Listing a folder and reading one entry's facts do less work, most of all on Windows, where each entry is opened once and not twice. Measured back to back on a busy machine, listing took 80, 18 and 49 percent of its old time in three runs, and a stat 52, 32 and 66 percent. A quiet machine has not measured it yet; [the bench](dev/bench.md) has the record.

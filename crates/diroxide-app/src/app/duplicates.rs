@@ -403,7 +403,7 @@ impl App {
     }
 
     /// The keep rules over the groups, the oldest first.
-    fn show_rules(&mut self, view: DupView) -> Vec<Effect> {
+    fn show_dup_rules(&mut self, view: DupView) -> Vec<Effect> {
         let folder = self.panel(view.setup.side).place().clone();
         let rows = rule_rows(&folder)
             .into_iter()
@@ -437,7 +437,7 @@ impl App {
             return vec![self.say(Message::info(NO_GROUPS_OPEN))];
         };
         let mut effects = self.close_top();
-        effects.extend(self.show_rules(view));
+        effects.extend(self.show_dup_rules(view));
         effects
     }
 
@@ -563,7 +563,7 @@ impl App {
             DupsWants::Groups(view) => {
                 let mut effects = self.close_top();
                 match row.as_str() {
-                    "keep" => effects.extend(self.show_rules(*view)),
+                    "keep" => effects.extend(self.show_dup_rules(*view)),
                     "trash" => effects.extend(self.trash_marked(*view)),
                     _ => match numbered(&row, 'g') {
                         Some(group) => effects.extend(self.show_members(*view, group, None, None)),

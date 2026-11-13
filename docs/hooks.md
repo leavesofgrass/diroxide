@@ -45,6 +45,16 @@ A plugin is woken only for what its `[[hook]]` table asks for. These keys narrow
 
 The filters look at each item at the place it is now: for a copy or a move, where it comes from. A job wakes a hook if any one of its items matches.
 
+### Synchronize and batch rename
+
+A synchronize adds no new events. It is one job, and the engine asks and tells the hooks the way it does for a copy and a delete, by what each step does:
+
+- Before the question, the `before_copy` hooks are asked about the files it would copy or replace, and the `before_delete` hooks about the files it would remove. A plugin that guards deletes therefore guards a mirror too.
+- Afterward the report is split the same way: `after_copy` hears the copies, and `after_delete` hears only the removals.
+- Compare folders reads and writes nothing, so it wakes no hook.
+
+A batch rename is one rename job, so the `before_rename` and `after_rename` hooks hear it as they hear any rename, with every pair of old and new name. [Synchronize](synchronize.md) and [Batch rename](rename.md) are the guides.
+
 ## What a before hook is sent
 
 The plugin gets one request, `hook/before`, as a line of JSON:
