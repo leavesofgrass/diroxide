@@ -436,6 +436,8 @@ impl App {
             }
             // The review's one-key answers (lane AP).
             Wants::Photos(wants) => self.photo_key(&wants, key),
+            // Space changes a copy's mark in the duplicates list (lane AS).
+            Wants::Dups(wants) => self.dups_key(&wants, key),
             _ => None,
         }
     }
