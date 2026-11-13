@@ -411,7 +411,12 @@ pub fn duplicates_scenario(setting: &Setting<'_>) -> Result<Outcome> {
         bytes += size as u64;
     }
     println!("bench: wrote {}.", diroxide_core::format::human_size(bytes));
-    let want = format!("{} group", grouped(groups));
+    // The app's count line says "1000 groups, 2,000 files": the group
+    // count without its thousands separator, so either form is taken.
+    let wants = [
+        format!("{} group", grouped(groups)),
+        format!("{groups} group"),
+    ];
     let mut found = String::new();
     let times = measure(setting.params.runs, |_| {
         let (mut app, mut runtime) = started_app(&folder, &other)?;
@@ -429,8 +434,11 @@ pub fn duplicates_scenario(setting: &Setting<'_>) -> Result<Outcome> {
         if app.dialog_purpose() != Some("DupsGroups") {
             bail!("the groups did not open: {heard:?}");
         }
-        let Some(line) = heard.iter().find(|line| line.starts_with(&want)) else {
-            bail!("no line starts {want}: {heard:?}");
+        let Some(line) = heard
+            .iter()
+            .find(|line| wants.iter().any(|want| line.starts_with(want.as_str())))
+        else {
+            bail!("no line starts {}: {heard:?}", wants[0]);
         };
         found = line.clone();
         Ok(elapsed)
@@ -451,15 +459,7 @@ pub fn duplicates_scenario(setting: &Setting<'_>) -> Result<Outcome> {
 pub fn tab_switch_scenario(setting: &Setting<'_>) -> Result<Outcome> {
     use diroxide_app::commands::ids;
     let count = setting.sizes.list_entries;
-    let big = setting.work.join("list");
-    if !big.is_dir() {
-        fs::create_dir(&big).with_context(|| format!("{} could not be made", big.display()))?;
-        println!(
-            "bench: writing {} empty files for the tab switch.",
-            grouped(count as u64)
-        );
-        super::sample::flat_folder(&big, count)?;
-    }
+    let big = listing_folder(setting)?;
     let small = scenario_folder(setting, "tabs-other")?;
     let (mut app, mut runtime) = started_app(&big, &small)?;
     let command = |id| diroxide_core::Command::new(id);
@@ -493,6 +493,65 @@ pub fn tab_switch_scenario(setting: &Setting<'_>) -> Result<Outcome> {
         format!(
             "shown in {}, then listed again until idle",
             time_words(median(&shown))
+        ),
+    ))
+}
+
+/// The listing's folder, written here when no listing scenario wrote it.
+fn listing_folder(setting: &Setting<'_>) -> Result<PathBuf> {
+    let count = setting.sizes.list_entries;
+    let big = setting.work.join("list");
+    if !big.is_dir() {
+        fs::create_dir(&big).with_context(|| format!("{} could not be made", big.display()))?;
+        println!("bench: writing {} empty files.", grouped(count as u64));
+        super::sample::flat_folder(&big, count)?;
+    }
+    Ok(big)
+}
+
+/// A panel's sort and type-ahead at many entries, the release budgets
+/// of the app's test `a_folder_of_100_000_entries_sorts_and_searches_in_time`
+/// (sort within 200 ms, a type-ahead lookup within 30 ms), which a debug
+/// build beside other work cannot hold: the left panel on the listing's
+/// folder, then Sort by size and Sort by name in turn, each timed from
+/// the command to its answer; the type-ahead is the panel's own prefix
+/// lookup of a name near the end.
+pub fn panel_sort_scenario(setting: &Setting<'_>) -> Result<Outcome> {
+    use diroxide_app::commands::ids;
+    let count = setting.sizes.list_entries;
+    let big = listing_folder(setting)?;
+    let small = scenario_folder(setting, "sort-other")?;
+    let (mut app, mut runtime) = started_app(&big, &small)?;
+    if app.panel(Side::Left).list().len() < count {
+        bail!("the panel did not list {count} entries");
+    }
+    let prefix = format!("entry-{:06}", count.saturating_sub(1) / 10);
+    let mut lookups = Vec::new();
+    let times = measure(setting.params.runs, |_| {
+        let mut elapsed = Duration::ZERO;
+        for id in [ids::SORT_SIZE, ids::SORT_NAME] {
+            let started = Instant::now();
+            let effects = app.dispatch(&diroxide_core::Command::new(id));
+            elapsed += started.elapsed();
+            runtime.run_until_idle(&mut app, effects);
+        }
+        let started = Instant::now();
+        let found = app.panel(Side::Left).prefix_matches(&prefix).len();
+        lookups.push(millis(started.elapsed()));
+        if found == 0 {
+            bail!("the type-ahead found nothing for {prefix}");
+        }
+        // Two sorts timed: the median says one.
+        Ok(elapsed / 2)
+    })?;
+    Ok(outcome(
+        "panel-sort",
+        format!("Sort a panel of {} entries", grouped(count as u64)),
+        times,
+        setting.params.budgets_ms.budget_for("panel-sort"),
+        format!(
+            "by size, then by name, each the command to its answer; type-ahead {}",
+            time_words(median(&lookups))
         ),
     ))
 }

@@ -292,10 +292,35 @@ pub struct Options {
     pub gui: bool,
     /// Add the cold release build to the GUI's budgets.
     pub cold_build: bool,
+    /// Add the run to `bench/NAME.json`, a named list of runs that is not
+    /// the baseline (alpha 5: runs measured beside other work).
+    pub save_as: Option<String>,
+}
+
+/// A named list of runs, `bench/NAME.json`: kept beside the baseline,
+/// never compared with.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+pub struct SavedRuns {
+    /// What the file is.
+    pub about: String,
+    /// The runs, oldest first.
+    pub runs: Vec<Run>,
+}
+
+/// Whether a name for `--save-as` is plain: small letters, digits and
+/// hyphens, not starting with a hyphen, and not the baseline's own.
+pub fn plain_run_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && !name.starts_with('-')
+        && name != "baseline"
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// The scenario ids, in the order they run.
-pub const SCENARIOS: [&str; 23] = [
+pub const SCENARIOS: [&str; 24] = [
     "list",
     "stat",
     "list-stat",
@@ -318,6 +343,7 @@ pub const SCENARIOS: [&str; 23] = [
     "flat-view",
     "duplicates",
     "tab-switch",
+    "panel-sort",
     "plugin-column",
 ];
 
@@ -329,7 +355,7 @@ const ARCHIVE_LISTINGS: [(&str, &str, &str); 3] = [
     ("archive-7z", "list.7z", "7z"),
 ];
 
-const USAGE: &str = "Usage: cargo xtask bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate]";
+const USAGE: &str = "Usage: cargo xtask bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--save-as NAME] [--gate]";
 
 /// Reads the arguments after `bench`.
 pub fn parse(args: &[&str]) -> Result<Options> {
@@ -344,6 +370,17 @@ pub fn parse(args: &[&str]) -> Result<Options> {
             "--cold-build" => {
                 options.gui = true;
                 options.cold_build = true;
+            }
+            "--save-as" => {
+                let Some(name) = rest.next() else {
+                    bail!("--save-as needs a name of small letters, digits and hyphens. {USAGE}");
+                };
+                if !plain_run_name(name) {
+                    bail!(
+                        "{name} is not a plain run name: small letters, digits and hyphens, and not baseline"
+                    );
+                }
+                options.save_as = Some((*name).to_owned());
             }
             "--only" => {
                 let Some(id) = rest.next() else {
@@ -803,6 +840,9 @@ pub fn run_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
     }
     if wanted(setting, &["tab-switch"]) {
         outcomes.push(alpha5::tab_switch_scenario(setting)?);
+    }
+    if wanted(setting, &["panel-sort"]) {
+        outcomes.push(alpha5::panel_sort_scenario(setting)?);
     }
     if wanted(setting, &["plugin-column"]) {
         outcomes.push(alpha5::plugin_column_scenario(setting)?);
@@ -1578,6 +1618,29 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
     )
     .with_context(|| format!("{} could not be written", result_file.display()))?;
     println!("bench: the medians are in {}.", result_file.display());
+    if let Some(name) = &options.save_as {
+        let file = root.join("bench").join(format!("{name}.json"));
+        let mut saved: SavedRuns = match fs::read_to_string(&file) {
+            Ok(text) => serde_json::from_str(&text)
+                .with_context(|| format!("{} is not valid", file.display()))?,
+            Err(_) => SavedRuns::default(),
+        };
+        if saved.about.is_empty() {
+            saved.about = format!(
+                "Runs saved with cargo xtask bench --save-as {name}; not a baseline, never compared with (docs/dev/bench.md)."
+            );
+        }
+        saved.runs.push(result.clone());
+        fs::write(
+            &file,
+            format!("{}\n", serde_json::to_string_pretty(&saved)?),
+        )
+        .with_context(|| format!("{} could not be written", file.display()))?;
+        println!(
+            "bench: added as run {} of bench/{name}.json.",
+            saved.runs.len()
+        );
+    }
     if options.save_baseline {
         if baseline.about.is_empty() {
             baseline.about = "The bench's baseline per platform, written by cargo xtask bench --save-baseline (docs/dev/bench.md).".to_owned();
@@ -1666,6 +1729,12 @@ mod tests {
         assert!(cold.gui && cold.cold_build && cold.only.is_none());
         assert!(parse(&["--quick", "--save-baseline"]).is_err());
         assert!(parse(&["--fast"]).is_err());
+        let named = parse(&["--save-as", "alpha5-provisional"]).unwrap();
+        assert_eq!(named.save_as.as_deref(), Some("alpha5-provisional"));
+        for bad in ["baseline", "Alpha5", "a b", "-x", "../x", "a.json", ""] {
+            assert!(parse(&["--save-as", bad]).is_err(), "{bad}");
+        }
+        assert!(parse(&["--save-as"]).is_err());
     }
 
     #[test]

@@ -21,7 +21,7 @@
 //!   dependency in the main workspace but the one allow entry (ring, for
 //!   the `fetch` feature of `diro`).
 //! - `bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline]
-//!   [--gate]`: the bench, on trees it writes under the target folder
+//!   [--save-as NAME] [--gate]`: the bench, on trees it writes under the target folder
 //!   (docs/dev/bench.md), with the GUI's budgets under `--gui`.
 //! - `docs --check`: the documentation rules of plan section 11.
 //! - `sample-folder PATH [--big-mb N]`: the owner's check folder.
@@ -65,7 +65,7 @@ use std::process::ExitCode;
 
 use anyhow::{Result, bail};
 
-const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] [--assets FOLDER] [--pin ID] [--addresses] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH | demo-tools PATH | version --check";
+const USAGE: &str = "Usage: cargo xtask deps --check | native --check | regen [--check] | components [--check] [--assets FOLDER] [--pin ID] [--addresses] | keyboard [--check] | icons [--check] | logo | bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--save-as NAME] [--gate] | docs --check | sample-folder PATH [--big-mb N] | search-tree PATH [--small] | demo PATH | demo-tools PATH | version --check";
 
 fn main() -> ExitCode {
     match run() {
