@@ -2306,6 +2306,58 @@ fn focus_dialog_row_starting(rig: &mut Rig, start: &str) {
     }
 }
 
+/// The synchronize plan when a folder changes (lane AS): "Result is old:
+/// folders changed" (30 cells) is said once and shown first, and
+/// Synchronize now refuses in words until Compare again.
+#[test]
+fn a_changed_folder_makes_the_plan_old_and_synchronize_now_refuses() {
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-stale-")
+        .tempdir()
+        .unwrap();
+    let mut rig = sync_plan(root.path());
+    let copies = root.path().join("copies");
+    let place = |path: &Path| diroxide_core::Place::parse(path.to_str().unwrap()).unwrap();
+    let before = rig.spoken().len();
+    let now = rig.now;
+    rig.f.event(
+        &mut HostOf(&mut rig.h),
+        AppEvent::Watched {
+            side: Side::Right,
+            place: place(&copies),
+            event: diroxide_vfs::WatchEvent::Changed(place(&copies.join("old.txt"))),
+        },
+        now,
+    );
+    rig.settle();
+    let stale = "Result is old: folders changed";
+    assert_eq!(stale.chars().count(), 30);
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    assert_eq!(
+        heard.iter().filter(|s| s.contains(stale)).count(),
+        1,
+        "{heard:?}"
+    );
+    assert_eq!(rig.f.app().dialog_purpose(), Some("SyncPlan"));
+    let rows: Vec<String> = rig
+        .dialog_walk()
+        .into_iter()
+        .filter(|(role, _)| *role == Role::ListBoxOption)
+        .map(|(_, name)| name)
+        .collect();
+    assert_eq!(rows[0], stale, "{rows:?}");
+    let before = rig.spoken().len();
+    answer(&mut rig, "a:run");
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    assert!(
+        heard
+            .iter()
+            .any(|s| s.contains("Result is old: folders changed. Compare again first.")),
+        "{heard:?}"
+    );
+    assert_eq!(rig.f.app().dialog_purpose(), Some("SyncPlan"));
+}
+
 /// The parts the purposes are opened in, each its own test.
 const PARTS: usize = 6;
 
