@@ -489,11 +489,15 @@ impl App {
                 place_leaf(&here)
             ));
         }
+        // Hidden items start as this panel shows them, as duplicates do
+        // (question 136); the row still switches them (lane AS).
+        let mut options = CompareOptions::from_settings(&self.settings);
+        options.hidden = self.panel(side).shows_hidden();
         Ok(Setup {
             side,
             here,
             there,
-            options: CompareOptions::from_settings(&self.settings),
+            options,
         })
     }
 

@@ -192,6 +192,16 @@ fn the_criteria_turn_settings_and_escape_compares_nothing() {
     let fake = folders();
     let (mut app, mut runtime) = started(&fake);
     run(&mut app, &mut runtime, ids::COMPARE_FOLDERS);
+    // Hidden items start as the panel shows them (lane AS): hidden
+    // files are not shown here, so the row starts off.
+    let hidden_row = |app: &App| {
+        labels(app)
+            .into_iter()
+            .find(|l| l.starts_with("Hidden items"))
+    };
+    assert_eq!(hidden_row(&app).as_deref(), Some("Hidden items: off"));
+    let said = enter(&mut app, &mut runtime, HIDDEN);
+    assert_eq!(said, ["Hidden items: on"]);
     let said = enter(&mut app, &mut runtime, HIDDEN);
     assert_eq!(said, ["Hidden items: off"]);
     let said = enter(&mut app, &mut runtime, HOUR);
@@ -207,6 +217,13 @@ fn the_criteria_turn_settings_and_escape_compares_nothing() {
     assert_eq!(said_of(&mut app, &mut runtime, effects), [NOTHING_COMPARED]);
     assert!(app.jobs.ids().is_empty());
     cells(NOTHING_COMPARED, NOTHING_COMPARED, 21);
+
+    // With hidden files shown in the panel, the row starts on.
+    run(&mut app, &mut runtime, ids::TOGGLE_HIDDEN);
+    run(&mut app, &mut runtime, ids::COMPARE_FOLDERS);
+    assert_eq!(hidden_row(&app).as_deref(), Some("Hidden items: on"));
+    let effects = app.dialog_escape();
+    said_of(&mut app, &mut runtime, effects);
 }
 
 fn said_of(app: &mut App, runtime: &mut Runtime, effects: Vec<Effect>) -> Vec<String> {
