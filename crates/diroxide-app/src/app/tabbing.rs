@@ -137,6 +137,20 @@ pub(super) struct TabsState {
 }
 
 impl TabsState {
+    /// The listers the panels do not show: every parked tab of both
+    /// sides, and the closed tabs Undo close can bring back. A setting
+    /// that changes what every lister shows (the columns) reaches these
+    /// too, so a switch never changes what a column says.
+    pub(super) fn parked_panels_mut(&mut self) -> impl Iterator<Item = &mut Panel> {
+        let parked = self
+            .strips
+            .iter_mut()
+            .flat_map(|strip| strip.slots.iter_mut())
+            .filter_map(|slot| slot.held.as_deref_mut().map(|held| &mut held.panel));
+        let closed = self.closed.iter_mut().map(|closed| &mut closed.held.panel);
+        parked.chain(closed)
+    }
+
     /// What the app starts with: one tab a panel and the saved sets.
     pub(super) fn new(sets: TabSets) -> Self {
         Self {

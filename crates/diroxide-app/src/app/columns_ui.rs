@@ -159,7 +159,10 @@ impl App {
     }
 
     /// The `columns` or `regex_columns` setting changed: both panels take
-    /// the new columns at once.
+    /// the new columns at once, and so does every parked or closed tab,
+    /// its columns of fields' keys resolved now, so showing it again
+    /// says the same columns as the tab it replaces. A parked tab's
+    /// cells are read when it is shown, since it lists its place again.
     pub(super) fn columns_setting_changed(&mut self) {
         let specs = self.settings.column_specs();
         let clock = Arc::clone(&self.clock);
@@ -167,6 +170,14 @@ impl App {
             self.panels[side.index()].set_columns(specs.clone(), clock.as_ref());
         }
         self.resolve_columns();
+        let pipeline = self.column_pipeline();
+        let keys = pipeline.keys();
+        let plugins = self.plugin_columns();
+        let fields = resolve(&specs, &keys, &self.settings.regex_columns, &plugins);
+        for panel in self.tabs.parked_panels_mut() {
+            panel.set_columns(specs.clone(), clock.as_ref());
+            panel.set_field_columns(fields.clone(), clock.as_ref());
+        }
     }
 
     /// After each event: rows waiting for cells near the focus take them,
