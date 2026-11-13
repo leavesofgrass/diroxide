@@ -974,10 +974,26 @@ impl App {
         if search.removed.contains(&hit.id()) {
             return false;
         }
-        match &search.refine {
-            Some(filter) => filter.evaluator(clock).matches(&hit.entry, &HitLookup(hit)),
-            None => true,
+        let Some(filter) = &search.refine else {
+            return true;
+        };
+        let evaluator = filter.evaluator(clock);
+        if evaluator.matches(&hit.entry, &HitLookup(hit)) {
+            return true;
         }
+        // In a flat view the filter also matches the folder words said
+        // after the name, "work/b/deep" (alpha 5, lane AS): the folder
+        // text stands in for the name.
+        if search.kind == ListKind::Flat {
+            let words = hit.folder_words(search.root.as_ref());
+            let folder = words.strip_prefix("in ").unwrap_or(&words);
+            if !folder.is_empty() {
+                let mut entry = hit.entry.clone();
+                entry.name = folder.to_owned();
+                return evaluator.matches(&entry, &HitLookup(hit));
+            }
+        }
+        false
     }
 
     fn result_rows(&self, search: &Search) -> Vec<ListRow> {

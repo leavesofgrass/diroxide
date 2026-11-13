@@ -335,6 +335,21 @@ fn the_flat_view_lists_every_file_below_and_turns_off() {
     labels.sort();
     assert_eq!(labels, ["a.txt", "one.txt", "two.txt"]);
 
+    // The refining filter matches the folder text after the name too:
+    // "*deep*" names no file here, only the folder two.txt is in.
+    let said = press(&mut app, &mut runtime, "ctrl+s");
+    assert_eq!(said, ["Refine results, empty"]);
+    let said = typed(&mut app, &mut runtime, "*deep*");
+    let line = "Refined: 1 of 3 shown";
+    assert_eq!(said, [line]);
+    assert_eq!(cells(line), 21);
+    let labels: Vec<String> = top_rows(&app).into_iter().map(|r| r.label).collect();
+    assert_eq!(labels, ["two.txt"]);
+    let said = press(&mut app, &mut runtime, "ctrl+s");
+    assert_eq!(said, ["Refine results: *deep*"]);
+    let said = typed(&mut app, &mut runtime, "one*");
+    assert_eq!(said, ["Refined: 1 of 3 shown"], "a name still matches");
+
     let said = run(&mut app, &mut runtime, ids::FLAT_VIEW);
     assert_eq!(said, ["Flat view off. work."]);
     assert_eq!(cells("Flat view off. work."), 20);
