@@ -183,6 +183,10 @@ pub struct PanelView {
     pub active: bool,
     /// What an empty list says ("Empty folder", "Reading folder").
     pub empty: String,
+    /// The columns each row says after its name, as the list box's
+    /// description (said after its name): "Columns: Name, Size, Artist";
+    /// empty when the rows say the name only ([`columns_words`]).
+    pub columns: String,
 }
 
 impl PanelView {
@@ -357,6 +361,7 @@ fn preview_view(app: &App, side: Side, top: usize, page: usize) -> Option<PanelV
         focus,
         active: app.in_preview(),
         empty,
+        columns: String::new(),
     })
 }
 
@@ -409,7 +414,47 @@ pub fn panel_view(app: &App, side: Side, top: usize, page: usize) -> PanelView {
         focus,
         active: side == app.active_side(),
         empty,
+        columns: columns_words(app, side),
     }
+}
+
+/// The columns a panel's rows say after the name, in their order, as a
+/// header in words (alpha 4's request MA 6: the rows said the cells only):
+/// "Columns: Name, Size, Modified, Artist". A field's column is said by
+/// its label, a column not yet resolved by its key; a plugin list by its
+/// own columns' titles. Empty when the rows say the name alone, so
+/// nothing extra is heard.
+pub fn columns_words(app: &App, side: Side) -> String {
+    let panel = app.panel(side);
+    let names: Vec<String> = match panel.plugin_list() {
+        Some(shown) => shown
+            .lister()
+            .columns()
+            .iter()
+            .map(|column| display_name(&column.header).into_owned())
+            .collect(),
+        // The GUI reaches the config crate's column type only through the
+        // app (`cargo xtask deps`), so by its methods, not its name.
+        None => panel
+            .columns()
+            .iter()
+            .map(|spec| match spec.kind() {
+                Some(kind) => kind.label().to_owned(),
+                None => {
+                    let key = spec.name();
+                    panel
+                        .field_columns()
+                        .iter()
+                        .find(|field| field.key == key)
+                        .map_or_else(|| key.to_owned(), |field| field.label.clone())
+                }
+            })
+            .collect(),
+    };
+    if names.is_empty() {
+        return String::new();
+    }
+    format!("Columns: Name, {}", names.join(", "))
 }
 
 /// A list inside a dialog: its name, its window of rows and its focus.
