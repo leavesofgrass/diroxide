@@ -226,6 +226,10 @@ impl App {
         if let Some(effects) = self.compare_key(&key) {
             return effects;
         }
+        // Space and the rename key in the batch rename preview (lane RA).
+        if let Some(effects) = self.rename_key(&key) {
+            return effects;
+        }
         // The labels', bookmarks' and History lists' own keys (W3l).
         if let Some(effects) = self.organize_key(&key) {
             return effects;

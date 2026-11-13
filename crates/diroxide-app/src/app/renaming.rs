@@ -1340,10 +1340,6 @@ impl App {
     /// A key in the preview before the dialog's own keys: Space skips the
     /// focused row or takes it back, and the key that renames a file
     /// edits its new name. `None` when the key is not the preview's.
-    #[allow(
-        dead_code,
-        reason = "called from dialog_key once lane RA's contract request adds the line there"
-    )]
     pub(super) fn rename_key(&mut self, key: &Key) -> Option<Vec<Effect>> {
         let index = self.focused_preview_row()?;
         let batch = self.open_batch()?;

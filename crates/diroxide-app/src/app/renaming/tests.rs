@@ -144,8 +144,9 @@ impl Fixture {
     }
 
     fn key(&mut self, text: &str) -> Vec<String> {
+        // Through the key path, as the owner presses it (lane AS).
         let key = Key::parse(text).unwrap();
-        let effects = self.app.rename_key(&key).expect("a key of the preview");
+        let effects = self.app.handle(AppEvent::Key(key));
         self.settle(effects)
     }
 
