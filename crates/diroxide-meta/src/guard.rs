@@ -16,13 +16,14 @@
 //! most [`Guard::most`] readers at once, those left past their deadline
 //! among them; past that the next read is refused at once ("busy with an
 //! earlier file", a cell that still says "reading"), so threads stay flat
-//! however many hostile files are read. Clones share the count.
+//! however many hostile files are read. Clones share the count. A caller
+//! refused waits for room ([`Guard::wait_for_room`]) and asks again.
 
 use std::io::{self, Read, Seek, SeekFrom};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -43,6 +44,15 @@ pub const MOST_RUNNING: usize = 4;
 pub struct Guard {
     most: usize,
     running: Arc<AtomicUsize>,
+    freed: Arc<Freed>,
+}
+
+/// Wakes callers waiting for a slot ([`Guard::wait_for_room`]) when a
+/// reader ends.
+#[derive(Debug, Default)]
+struct Freed {
+    lock: Mutex<()>,
+    wake: Condvar,
 }
 
 impl Default for Guard {
@@ -51,12 +61,15 @@ impl Default for Guard {
     }
 }
 
-/// Counts a reader while its thread lives.
-struct Running(Arc<AtomicUsize>);
+/// Counts a reader until its work ends, then wakes the waiting callers.
+struct Running(Arc<AtomicUsize>, Arc<Freed>);
 
 impl Drop for Running {
     fn drop(&mut self) {
         self.0.fetch_sub(1, Ordering::SeqCst);
+        // Taken so a caller between its check and its wait hears this.
+        let _held = self.1.lock.lock().unwrap_or_else(PoisonError::into_inner);
+        self.1.wake.notify_all();
     }
 }
 
@@ -66,7 +79,33 @@ impl Guard {
         Self {
             most: most.max(1),
             running: Arc::new(AtomicUsize::new(0)),
+            freed: Arc::new(Freed::default()),
         }
+    }
+
+    /// Waits until the guard has room for another reader, at most
+    /// `longest`: `true` when it has room, `false` when every slot is
+    /// still held then. What a caller refused with [`MetaError::Busy`]
+    /// does before it asks again; a reader left past its deadline frees
+    /// its slot at its next read of its [`Bounded`] source.
+    pub fn wait_for_room(&self, longest: Duration) -> bool {
+        let ends = Instant::now() + longest;
+        let mut held = self
+            .freed
+            .lock
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        while self.running() >= self.most {
+            let left = ends.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return false;
+            }
+            held = match self.freed.wake.wait_timeout(held, left) {
+                Ok((held, _)) => held,
+                Err(poisoned) => poisoned.into_inner().0,
+            };
+        }
+        true
     }
 
     /// The most readers it runs at once.
@@ -93,7 +132,7 @@ impl Guard {
             self.running.fetch_sub(1, Ordering::SeqCst);
             return Err(MetaError::Busy);
         }
-        let count = Running(Arc::clone(&self.running));
+        let count = Running(Arc::clone(&self.running), Arc::clone(&self.freed));
         let (tx, rx) = mpsc::sync_channel(1);
         let spawned = thread::Builder::new()
             .name("diroxide-meta".to_owned())
@@ -305,9 +344,43 @@ mod tests {
     fn a_slot_is_free_when_its_answer_arrives() {
         let guard = Guard::new(1);
         for round in 0..2000 {
-            assert_eq!(guard.run(Duration::from_secs(5), move || Ok(round)), Ok(round));
+            assert_eq!(
+                guard.run(Duration::from_secs(5), move || Ok(round)),
+                Ok(round)
+            );
             assert_eq!(guard.running(), 0, "round {round}");
         }
+    }
+
+    /// Lane PC: a caller refused as busy waits for room, and has it as
+    /// soon as the reader holding the slot ends.
+    #[test]
+    fn a_refused_caller_waits_for_room() {
+        let guard = Guard::new(1);
+        assert!(guard.wait_for_room(Duration::ZERO), "an empty guard");
+        let (started, has_started) = mpsc::channel::<()>();
+        let (hold, wait) = mpsc::channel::<()>();
+        let busy = guard.clone();
+        let first = thread::spawn(move || {
+            busy.run(Duration::from_secs(30), move || {
+                let _ = started.send(());
+                let _ = wait.recv_timeout(Duration::from_secs(30));
+                Ok(())
+            })
+        });
+        has_started.recv().unwrap();
+        assert_eq!(
+            guard.run(Duration::from_secs(1), || Ok(())),
+            Err(MetaError::Busy)
+        );
+        assert!(
+            !guard.wait_for_room(Duration::from_millis(20)),
+            "still held"
+        );
+        hold.send(()).unwrap();
+        assert!(guard.wait_for_room(Duration::from_secs(30)));
+        assert_eq!(guard.run(Duration::from_secs(5), || Ok(2)), Ok(2));
+        assert_eq!(first.join().unwrap(), Ok(()));
     }
 
     #[test]
