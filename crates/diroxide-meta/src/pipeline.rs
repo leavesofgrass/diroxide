@@ -620,13 +620,20 @@ mod tests {
             max_bytes: 1024,
             deadline: Duration::from_millis(100),
         };
+        // Only the hanging reader races the clock: the other two get a
+        // deadline a loaded machine cannot miss, so each fails for its
+        // own reason and never for being slow to start.
+        let roomy = ReadLimits {
+            max_bytes: limits.max_bytes,
+            deadline: Duration::from_secs(60),
+        };
         let cancel = CancelToken::new();
         let source = || -> Box<dyn ReadSeek> { Box::new(std::io::Cursor::new(vec![b'x'; 4096])) };
-        let panics = pipeline.read_source("panics", source(), &request, &limits, &cancel);
+        let panics = pipeline.read_source("panics", source(), &request, &roomy, &cancel);
         assert_eq!(panics, Some(Err(MetaError::ReaderFailed)));
         let hangs = pipeline.read_source("hangs", source(), &request, &limits, &cancel);
         assert_eq!(hangs, Some(Err(MetaError::TooSlow)));
-        let reads = pipeline.read_source("reads", source(), &request, &limits, &cancel);
+        let reads = pipeline.read_source("reads", source(), &request, &roomy, &cancel);
         assert_eq!(reads, Some(Err(MetaError::TooLarge)));
         assert!(
             pipeline
