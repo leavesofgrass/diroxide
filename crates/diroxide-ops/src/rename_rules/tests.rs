@@ -259,7 +259,8 @@ fn the_count_line_leads_with_the_worst_news_inside_40_cells() {
     );
     assert_eq!(clean.count_line(), "1 of 2 files will change. No problems.");
     assert!(clean.is_ready());
-    assert_eq!(clean.question(), format!("Rename 1 file in {}?", p("/a")));
+    // The folder's own name, not its path (lane AS).
+    assert_eq!(clean.question(), "Rename 1 file in a?");
     let clash = plan(
         &["1.txt", "2.txt", "3.txt", "keep.txt"],
         &Recipe::of(vec![Rule::pattern("^[0-9]$", "keep")]),
@@ -274,10 +275,7 @@ fn the_count_line_leads_with_the_worst_news_inside_40_cells() {
         }]),
     );
     assert_eq!(care.count_line(), "2 need care. 2 of 2 will change.");
-    assert_eq!(
-        care.question(),
-        format!("Rename 2 files in {}, 2 need care?", p("/a"))
-    );
+    assert_eq!(care.question(), "Rename 2 files in a, 2 need care?");
     let lines = [
         clash.count_line(),
         care.count_line(),
@@ -379,10 +377,7 @@ fn names_not_allowed_are_said_in_words() {
         "Care, has hidden characters: a.txt becomes a[U+200B].txt"
     );
     assert_eq!(care.count_line(), "1 needs care. 1 of 1 will change.");
-    assert_eq!(
-        care.question(),
-        format!("Rename 1 file in {}, 1 needs care?", p("/a"))
-    );
+    assert_eq!(care.question(), "Rename 1 file in a, 1 needs care?");
     let mut odd = files("/a", &["x"], &[]).0;
     odd[0].entry.name_not_unicode = true;
     let plan = plan_rename(&odd, &recipe("y"), &RenameContext::new()).unwrap();

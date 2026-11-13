@@ -310,11 +310,17 @@ fn yes_reads_the_folder_again_and_renames_in_one_job_with_one_undo() {
     f.run(ids::BATCH_RENAME);
     f.add_replace("IMG_", "trip-");
     let said = f.enter("apply");
-    let question = format!(
-        "Rename 3 files in {}? No is the default. y or n",
-        place(&f.folder)
-    );
+    // The folder's own name, "No is the default" inside 40 cells (lane
+    // AS).
+    let question = "Rename 3 files in photos? No is the default. y or n";
     assert_eq!(said, [question]);
+    assert_eq!(
+        "Rename 3 files in photos? No is the default."
+            .chars()
+            .count(),
+        44
+    );
+    assert_eq!("Rename 3 files in photos? No is".chars().count(), 31);
     let said = f.yes();
     assert!(
         said.contains(&"Checking the folder again.".to_owned()),

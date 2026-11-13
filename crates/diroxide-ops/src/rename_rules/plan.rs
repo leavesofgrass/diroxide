@@ -598,7 +598,7 @@ impl RenamePlan {
     }
 
     /// The confirmation's question, which starts on No: "Rename 47 files
-    /// in D:\photos?"; "Rename 12 files in 3 folders, 1 needs care?".
+    /// in photos?"; "Rename 12 files in 3 folders, 1 needs care?".
     pub fn question(&self) -> String {
         let files = count(self.renaming() as u64, "file", "files");
         let mut folders: Vec<&Place> = Vec::new();
@@ -610,8 +610,13 @@ impl RenamePlan {
                 folders.push(known);
             }
         }
+        // The folder's own name, so "No is the default" stays inside 40
+        // cells; the listing under the question has the paths (lane AS).
         let place = match folders.as_slice() {
-            [one] => format!(" in {one}"),
+            [one] => match one.name() {
+                Some(name) => format!(" in {}", diroxide_core::names::display_name(name)),
+                None => format!(" in {one}"),
+            },
             [] => String::new(),
             many => format!(" in {} folders", many.len()),
         };
