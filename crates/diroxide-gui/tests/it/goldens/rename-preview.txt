@@ -1,0 +1,11 @@
+Window "work - diroxide"
+  GenericContainer ""
+    GenericContainer ""
+      GenericContainer ""
+        Label "work, 8 items, in <dir>" live=polite
+      Dialog "1 of 2 files will change. No problems."
+        GenericContainer ""
+          Label "Enter on a row: edit its name, skip it, or hear both names. Escape goes back to the rules."
+        ListBox "1 of 2 files will change. No problems."
+          ListBoxOption "a.txt becomes c.txt" 1 of 2 FOCUS
+          ListBoxOption "Same name: b.txt" 2 of 2

@@ -183,6 +183,10 @@ pub struct PanelView {
     pub active: bool,
     /// What an empty list says ("Empty folder", "Reading folder").
     pub empty: String,
+    /// The columns each row says after its name, as the list box's
+    /// description (said after its name): "Columns: Name, Size, Artist";
+    /// empty when the rows say the name only ([`columns_words`]).
+    pub columns: String,
 }
 
 impl PanelView {
@@ -205,33 +209,46 @@ pub fn side_word(side: Side) -> &'static str {
     }
 }
 
-/// The list box's name: the panel, then what it shows.
+/// A panel's tab after what it shows, a comma first: ", tab 2 of 3", with
+/// the lock when one holds (", tab 2 of 3, locked"); empty with one tab,
+/// so a panel of one tab says nothing of tabs (the app's rule, lane TB).
+pub fn tab_after(app: &App, side: Side) -> String {
+    app.tab_title_words(side)
+        .map(|tab| format!(", {tab}"))
+        .unwrap_or_default()
+}
+
+/// The list box's name: the panel, then what it shows, then its tab when
+/// it has more than one: "Left panel, Documents, tab 2 of 3".
 pub fn panel_name(app: &App, side: Side) -> String {
     let panel = app.panel(side);
     let shows = match panel.plugin_list() {
         Some(shown) => display_name(shown.list().title()).into_owned(),
         None => place_leaf(panel.loading_place().unwrap_or(panel.place())),
     };
-    format!("{} panel, {shows}", side_word(side))
+    format!("{} panel, {shows}{}", side_word(side), tab_after(app, side))
 }
 
 /// The other panel's title, from its own place and count (R27's C2: the
 /// app's title line covers only the active panel): "Backup, right panel,
 /// 1 item, in D:\work", with ", loading" while it lists. A plugin list
 /// says its title and its rows: "Changed files, right panel, 2 rows".
+/// With more than one tab, the tab follows what it shows, as in the
+/// app's title line: "Backup, tab 2 of 3, right panel, 1 item".
 pub fn inactive_title(app: &App, side: Side) -> String {
     let panel = app.panel(side);
     let words = side.word();
+    let tab = tab_after(app, side);
     if let Some(shown) = panel.plugin_list() {
         let list = shown.list();
         return format!(
-            "{}, {words} panel, {}",
+            "{}{tab}, {words} panel, {}",
             display_name(list.title()),
             count(list.len() as u64, "row", "rows")
         );
     }
     let place = panel.loading_place().unwrap_or(panel.place());
-    let mut text = format!("{}, {words} panel", place_leaf(place));
+    let mut text = format!("{}{tab}, {words} panel", place_leaf(place));
     if panel.is_loading() {
         text.push_str(", loading");
     } else {
@@ -260,12 +277,14 @@ pub fn panel_header(app: &App, side: Side) -> String {
     }
 }
 
-/// A number that changes when a panel shows another list: its place, or a
-/// plugin list over it.
+/// A number that changes when a panel shows another list: its place, its
+/// tab (two tabs on one folder are two lists, lane TB), or a plugin list
+/// over it.
 pub fn generation(app: &App, side: Side) -> u64 {
     let panel = app.panel(side);
     let mut hasher = DefaultHasher::new();
     panel.place().to_string().hash(&mut hasher);
+    panel.tab_id().hash(&mut hasher);
     if let Some(shown) = panel.plugin_list() {
         shown.plugin_id().hash(&mut hasher);
         shown.id().hash(&mut hasher);
@@ -342,6 +361,7 @@ fn preview_view(app: &App, side: Side, top: usize, page: usize) -> Option<PanelV
         focus,
         active: app.in_preview(),
         empty,
+        columns: String::new(),
     })
 }
 
@@ -394,7 +414,47 @@ pub fn panel_view(app: &App, side: Side, top: usize, page: usize) -> PanelView {
         focus,
         active: side == app.active_side(),
         empty,
+        columns: columns_words(app, side),
     }
+}
+
+/// The columns a panel's rows say after the name, in their order, as a
+/// header in words (alpha 4's request MA 6: the rows said the cells only):
+/// "Columns: Name, Size, Modified, Artist". A field's column is said by
+/// its label, a column not yet resolved by its key; a plugin list by its
+/// own columns' titles. Empty when the rows say the name alone, so
+/// nothing extra is heard.
+pub fn columns_words(app: &App, side: Side) -> String {
+    let panel = app.panel(side);
+    let names: Vec<String> = match panel.plugin_list() {
+        Some(shown) => shown
+            .lister()
+            .columns()
+            .iter()
+            .map(|column| display_name(&column.header).into_owned())
+            .collect(),
+        // The GUI reaches the config crate's column type only through the
+        // app (`cargo xtask deps`), so by its methods, not its name.
+        None => panel
+            .columns()
+            .iter()
+            .map(|spec| match spec.kind() {
+                Some(kind) => kind.label().to_owned(),
+                None => {
+                    let key = spec.name();
+                    panel
+                        .field_columns()
+                        .iter()
+                        .find(|field| field.key == key)
+                        .map_or_else(|| key.to_owned(), |field| field.label.clone())
+                }
+            })
+            .collect(),
+    };
+    if names.is_empty() {
+        return String::new();
+    }
+    format!("Columns: Name, {}", names.join(", "))
 }
 
 /// A list inside a dialog: its name, its window of rows and its focus.
