@@ -707,6 +707,27 @@ impl Plan {
             JobKind::Trash => format!("Move {items} to the trash"),
             JobKind::DeletePermanently => format!("Delete {items} for good"),
             JobKind::Rename => format!("Rename {items}"),
+            // "Synchronize: 3 copies, 2 removals", the copies with the
+            // replaces, never a destination (a synchronize writes both
+            // ways).
+            JobKind::Synchronize => {
+                let gone = self
+                    .steps
+                    .iter()
+                    .filter(|step| matches!(step, Step::Trash { .. } | Step::Remove { .. }))
+                    .count() as u64;
+                let copies = self.steps.len() as u64 - gone;
+                let parts: Vec<String> =
+                    [(copies, "copy", "copies"), (gone, "removal", "removals")]
+                        .into_iter()
+                        .filter(|(n, _, _)| *n > 0)
+                        .map(|(n, one, many)| count(n, one, many))
+                        .collect();
+                match parts.as_slice() {
+                    [] => "Synchronize: nothing to do".to_owned(),
+                    parts => format!("Synchronize: {}", parts.join(", ")),
+                }
+            }
             JobKind::MakeFolder => format!(
                 "Make {}",
                 count(self.steps.len() as u64, "folder", "folders")

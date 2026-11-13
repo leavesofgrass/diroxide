@@ -55,10 +55,10 @@ pub use session::{
 };
 pub use settings::{
     ArchiveSettings, AutoPreview, CompareAlgorithm, CompareSettings, CompletionList,
-    ConfirmSettings, DRIVE_KINDS, FilterCase, Frontend, Graphics, HexRow, Highlighting,
-    JobSettings, LargeFilePolicy, Menus, OnErrors, PluginSettings, QuickViewSettings,
-    ScreenReaderMode, SecretEcho, Settings, SingleLetters, SpeedLimitScope, ViewerSettings,
-    WeekStart,
+    ConfirmSettings, DRIVE_KINDS, DupHidden, DupSettings, FilterCase, Frontend, Graphics, HexRow,
+    Highlighting, JobSettings, LargeFilePolicy, ListSettings, Menus, OnErrors, PluginSettings,
+    QuickViewSettings, RenameEditorLines, RenamePreviewOrder, RenameSettings, ScreenReaderMode,
+    SecretEcho, Settings, SingleLetters, SpeedLimitScope, ViewerSettings, WeekStart,
 };
 pub use store::{ConfigProblem, Loaded, problems_line, write_atomic, write_reference};
 pub use tasks::{

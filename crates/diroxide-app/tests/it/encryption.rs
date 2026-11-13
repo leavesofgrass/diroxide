@@ -205,11 +205,52 @@ fn the_submenu_is_on_the_file_menu() {
         ids::ENCRYPT_RECIPIENT,
         ids::DECRYPT,
         ids::GPG_ENCRYPT,
+        ids::GPG_ENCRYPT_TEXT,
         ids::GPG_DECRYPT,
         ids::SIGN,
+        ids::SIGN_TEXT,
         ids::VERIFY_SIGNATURE,
     ] {
         assert_eq!(menus.holder_of(&id), Some("Encryption"), "{id}");
+    }
+}
+
+/// The "as text" commands make ASCII armor beside the file, NAME.asc,
+/// and gpg is asked for it (lane FX's `GpgOptions::armor`, offered by
+/// lane AF).
+#[test]
+fn encrypt_and_sign_as_text_plan_an_armored_file() {
+    let (_dir, _work, mut s) = plain();
+    s.tools.answer("gpg", b"[GNUPG:] END_ENCRYPTION\n");
+    s.focus("notes.txt");
+    s.command(ids::GPG_ENCRYPT_TEXT);
+    assert_eq!(
+        s.dialog_title().as_deref(),
+        Some("Encrypt for gpg keys (empty: passphrase)")
+    );
+    s.type_text("4E7B");
+    s.key("enter");
+    let Some(Dialog::Confirm { listing, .. }) = s.dialog().cloned() else {
+        panic!("no plan: {:?}", s.dialog());
+    };
+    assert_eq!(listing, ["notes.txt to notes.txt.asc"]);
+    s.key("y");
+    let args: Vec<String> = s.tools.runs.lock().unwrap()[0]
+        .args
+        .iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.contains(&"--armor".to_owned()), "{args:?}");
+    // Sign as text: the same, into an armored signature.
+    s.command(ids::SIGN_TEXT);
+    s.key("enter");
+    let Some(Dialog::Confirm { listing, .. }) = s.dialog().cloned() else {
+        panic!("no plan: {:?}", s.dialog());
+    };
+    assert_eq!(listing, ["notes.txt to notes.txt.asc"]);
+    s.key("n");
+    for name in ["Encrypt with gpg, as text", "Sign with gpg, as text"] {
+        assert!(name.chars().count() <= 40, "{name}");
     }
 }
 

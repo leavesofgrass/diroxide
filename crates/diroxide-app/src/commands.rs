@@ -762,10 +762,15 @@ pub mod ids {
         DECRYPT = "file.decrypt";
         /// Encrypt the marked files with gpg, for keys or a passphrase.
         GPG_ENCRYPT = "file.gpg-encrypt";
+        /// Encrypt with gpg into ASCII armor, NAME.asc (lane AF).
+        GPG_ENCRYPT_TEXT = "file.gpg-encrypt-text";
         /// Decrypt OpenPGP files with gpg.
         GPG_DECRYPT = "file.gpg-decrypt";
         /// Make a detached gpg signature of each marked file.
         SIGN = "file.sign";
+        /// Sign with gpg into an ASCII armored signature, NAME.asc (lane
+        /// AF).
+        SIGN_TEXT = "file.sign-text";
         /// Check the focused file's signature, or the focused signature.
         VERIFY_SIGNATURE = "file.verify-signature";
     }
@@ -853,6 +858,61 @@ pub mod ids {
         /// Load a saved tab set.
         TAB_LOAD_SET = "tab.load-set";
     }
+
+    // Reserved by the pre-wiring step (alpha 5, lane P5) for the four app
+    // lanes of stage 2: each id is in the catalog and the menus, and its
+    // arm calls a stub in the lane's own file until the lane fills it
+    // (`crate::app::reserved`). None has a default key.
+    ids! {
+        /// Batch rename the marked entries (lane RA).
+        BATCH_RENAME = "rename.batch";
+        /// Rename the marked entries one by one, as F2 always did.
+        RENAME_ONE_BY_ONE = "rename.one-by-one";
+        /// Edit the batch's new names in the text editor.
+        RENAME_IN_EDITOR = "rename.in-editor";
+        /// Make every new name in the batch unique.
+        RENAME_MAKE_UNIQUE = "rename.make-unique";
+        /// Skip every row of the batch that has a problem.
+        RENAME_SKIP_PROBLEMS = "rename.skip-problems";
+        /// Go to the batch's next problem.
+        RENAME_NEXT_PROBLEM = "rename.next-problem";
+        /// Go to the batch's previous problem.
+        RENAME_PREVIOUS_PROBLEM = "rename.previous-problem";
+        /// Say the focused row's old and new names in full.
+        RENAME_SAY_BOTH = "rename.say-both";
+        /// Apply this pass in memory and start another.
+        RENAME_NEXT_PASS = "rename.next-pass";
+        /// List the saved rename presets.
+        RENAME_PRESETS = "rename.presets";
+        /// Compare the two panels' folders (lane SA).
+        COMPARE_FOLDERS = "compare.folders";
+        /// Plan a synchronize from the folder compare.
+        SYNCHRONIZE = "sync.plan";
+        /// Set the focused plan row to copy toward this panel.
+        SYNC_TOWARD_HERE = "sync.toward-here";
+        /// Set the focused plan row to copy toward the other panel.
+        SYNC_TOWARD_THERE = "sync.toward-there";
+        /// Compare the folders again with the options as they are now.
+        COMPARE_AGAIN = "compare.again";
+        /// Find duplicate files (lane DA).
+        FIND_DUPLICATES = "dups.find";
+        /// Choose which copies to keep in every group.
+        DUPS_KEEP = "dups.keep";
+        /// Turn the flat view of this panel's folder on or off (lane LA).
+        FLAT_VIEW = "view.flat";
+        /// List the collections and saved searches.
+        COLLECTIONS = "go.collections";
+        /// List the files opened or edited lately.
+        RECENT_FILES = "go.recent-files";
+        /// Save the list or the marked entries as a collection.
+        SAVE_AS_COLLECTION = "file.save-as-collection";
+        /// Add the marked entries to the default collection.
+        COLLECT = "file.collect";
+        /// Remove a collection's missing items.
+        COLLECTION_REMOVE_MISSING = "collection.remove-missing";
+        /// Forget every recent file.
+        RECENT_CLEAR = "recent.clear";
+    }
 }
 
 use Layer::{Dialog, Global, List, Panel, Preview, Viewer};
@@ -877,7 +937,7 @@ const fn command(
 }
 
 /// Every built-in command, in the order the keyboard page lists them.
-pub static CATALOG: [CommandInfo; 303] = [
+pub static CATALOG: [CommandInfo; 329] = [
     command(
         ids::QUIT,
         "Quit",
@@ -1783,6 +1843,14 @@ pub static CATALOG: [CommandInfo; 303] = [
         &[],
     ),
     command(
+        ids::GPG_ENCRYPT_TEXT,
+        "Encrypt with gpg, as text",
+        "As Encrypt with gpg, into NAME.asc instead: ASCII armor, text that can be pasted into a mail or a form.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
         ids::GPG_DECRYPT,
         "Decrypt with gpg",
         "Decrypts the marked OpenPGP files, or the focused one, with gpg; a key gpg's agent holds asks nothing, otherwise its passphrase is asked in a hidden field, never on a command line.",
@@ -1794,6 +1862,14 @@ pub static CATALOG: [CommandInfo; 303] = [
         ids::SIGN,
         "Sign with gpg",
         "Makes a detached signature, NAME.sig, of the marked files, or the focused one, with the gpg key you type or your default key, its passphrase asked in a hidden field.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SIGN_TEXT,
+        "Sign with gpg, as text",
+        "As Sign with gpg, into NAME.asc instead: an ASCII armored signature, text that can be pasted.",
         Panel,
         &[],
         &[],
@@ -3303,6 +3379,200 @@ pub static CATALOG: [CommandInfo; 303] = [
         "Load tab set",
         "Lists the saved tab sets to load one in place of the open tabs.",
         Panel,
+        &[],
+        &[],
+    ),
+    // Reserved by the pre-wiring step (alpha 5, lane P5) for the app
+    // lanes RA, SA, DA and LA; no default keys.
+    command(
+        ids::BATCH_RENAME,
+        "Batch rename",
+        "Renames the marked entries by rules, with a preview of every new name before anything changes.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_ONE_BY_ONE,
+        "Rename one by one",
+        "Asks a new name for each marked entry in turn.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_IN_EDITOR,
+        "Edit names in editor",
+        "In a batch rename, opens the new names in your text editor; the batch reads them back when it closes.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_MAKE_UNIQUE,
+        "Make names unique",
+        "In a batch rename, numbers the new names that clash so every one is unique.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_SKIP_PROBLEMS,
+        "Skip problems",
+        "In a batch rename, skips every row that has a problem; the others still rename.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_NEXT_PROBLEM,
+        "Next problem",
+        "In a batch rename, goes to the next row with a problem.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_PREVIOUS_PROBLEM,
+        "Previous problem",
+        "In a batch rename, goes to the row with a problem before this one.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_SAY_BOTH,
+        "Say both names",
+        "In a batch rename, says the focused row's old and new names in full, hidden characters spelled out.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_NEXT_PASS,
+        "Next pass",
+        "In a batch rename, applies these rules in memory and starts another set of rules on the result.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RENAME_PRESETS,
+        "Rename presets",
+        "In a batch rename, lists the saved rule sets to load, save or delete one.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPARE_FOLDERS,
+        "Compare folders",
+        "Compares this panel's folder with the other panel's, by names, size and time, or contents.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SYNCHRONIZE,
+        "Synchronize",
+        "Plans what to copy, replace and trash so the two panels' folders match, and shows the plan before anything changes.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SYNC_TOWARD_HERE,
+        "Copy toward this panel",
+        "In a synchronize plan, makes the focused row copy toward this panel.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SYNC_TOWARD_THERE,
+        "Copy toward other panel",
+        "In a synchronize plan, makes the focused row copy toward the other panel.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COMPARE_AGAIN,
+        "Compare again",
+        "In a folder compare or a synchronize plan, compares the folders again with the options as they are now.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FIND_DUPLICATES,
+        "Find duplicates",
+        "Finds files with the same contents in this folder, the marked entries or both panels.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::DUPS_KEEP,
+        "Choose copies to keep",
+        "In the duplicates, marks every copy but one in each group: the oldest, the newest, or another rule.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::FLAT_VIEW,
+        "Flat view",
+        "Lists every file below this panel's folder in one list, or turns that list off.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COLLECTIONS,
+        "Collections",
+        "Lists your collections and saved searches, each to open as a list.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RECENT_FILES,
+        "Recent files",
+        "Lists the files you opened or edited lately, newest first.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::SAVE_AS_COLLECTION,
+        "Save as collection",
+        "Saves the list on the screen, or this panel's marked entries, as a collection by a name.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COLLECT,
+        "Collect",
+        "Adds the marked entries, or the focused one, to the default collection.",
+        Panel,
+        &[],
+        &[],
+    ),
+    command(
+        ids::COLLECTION_REMOVE_MISSING,
+        "Remove missing items",
+        "In a collection, takes out the items that are gone; no file is touched.",
+        List,
+        &[],
+        &[],
+    ),
+    command(
+        ids::RECENT_CLEAR,
+        "Clear recent files",
+        "Forgets every recent file; no file is touched.",
+        List,
         &[],
         &[],
     ),

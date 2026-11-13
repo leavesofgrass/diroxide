@@ -223,11 +223,11 @@ fn the_internet_mark_is_asked_about_removed_and_put_back_by_undo() {
         fs::read(work.join("setup.exe")).unwrap(),
         b"not really a program"
     );
+    // Undo writes it back through the engine's undo record (lane AF).
     let said = s.key("ctrl+z");
-    assert_eq!(
-        said.last().unwrap(),
-        "Put back the internet mark on setup.exe"
-    );
+    let undid = said.last().unwrap();
+    assert_eq!(undid, "Undid mark removal: 1 item is back");
+    assert!(undid.chars().count() <= 40, "{undid}");
     assert!(
         diroxide_meta::origin::read_mark(&provider, &file, &ctx)
             .unwrap()

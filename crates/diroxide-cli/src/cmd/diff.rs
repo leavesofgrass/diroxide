@@ -15,6 +15,12 @@
 //! - A text file over 16 MiB is compared byte by byte and the report says
 //!   so; `--head` compares the first 16 MiB as text instead.
 //!
+//! - Two folders (alpha 5, lane CX) are compared through lane CS's
+//!   folder compare: the count line that adds up, how the rows were
+//!   verified, then one row a difference ("Only here: plan.md");
+//!   `--brief` the count line only; `--names` (`-0`) the relative paths
+//!   that differ, NUL-separated, for a pipeline.
+//!
 //! Everything `diro diff` says goes to standard output in order, its
 //! problems included, as `diro ls` does, so a screen reader hears one
 //! story. Exit codes: 0 the same, 1 different, 2 wrong use or trouble (a
@@ -24,12 +30,13 @@
 use std::io::{BufWriter, Write};
 
 use diroxide_core::names::display_name;
-use diroxide_core::{Explain, Message, Place};
+use diroxide_core::{EntryKind, Explain, Message, Place};
 use diroxide_diff::grammar::DEFAULT_CONTEXT;
 use diroxide_diff::{
     Change, ChangeKind, CompareOptions, Context, FileComparison, FileOptions, FileSide, Ignore,
     LargeFiles, Outcome, Sides, Verdict, compare_files,
 };
+use diroxide_ops::sync::RowState;
 use diroxide_vfs::{OpContext, Registry, VfsError};
 use serde_json::{Value, json};
 
@@ -65,6 +72,9 @@ pub struct DiffArgs {
     pub context: usize,
     /// Compare the first 16 MiB of a larger text file as text.
     pub head: bool,
+    /// Two folders: print only the relative paths that differ,
+    /// NUL-separated (`--names`, `-0`).
+    pub names: bool,
     /// Print the help for `diro diff` and nothing else.
     pub help: bool,
 }
@@ -79,6 +89,7 @@ impl Default for DiffArgs {
             ignore: Ignore::default(),
             context: DEFAULT_CONTEXT,
             head: false,
+            names: false,
             help: false,
         }
     }
@@ -103,6 +114,11 @@ pub fn help_text() -> String {
         "--ignore-blank-lines, -B   ignore changes whose lines are all blank",
         "--line-endings             compare line endings too; ignored by default",
         "--head                     over 16 MiB, compare the first 16 MiB as text, not byte by byte",
+        "",
+        "Two folders:",
+        "diro diff BEFORE AFTER     compare two folders: the count line, then one row a difference",
+        "--brief, -q                print the count line only",
+        "--names, -0                print the relative paths that differ, NUL-separated",
         "",
         "Exit codes:",
         "0  the same",
@@ -167,6 +183,7 @@ pub fn parse(args: &[String]) -> Result<DiffArgs, CliError> {
             "--ignore-blank-lines" | "-B" => parsed.ignore.blank_lines = true,
             "--line-endings" => parsed.ignore.line_endings = false,
             "--head" => parsed.head = true,
+            "--names" | "-0" => parsed.names = true,
             "-" => {
                 return Err(CliError::Failed(
                     "diro diff compares two files by name; standard input is not one".to_owned(),
@@ -263,7 +280,10 @@ pub fn run_with(
     here: &Place,
 ) -> Result<i32, CliError> {
     let mut out = BufWriter::new(out);
-    let code = compare_and_say(args, &mut out, registry, here)?;
+    let code = match folder_pair(args, registry, here) {
+        Some((before, after)) => compare_folders(args, &mut out, registry, &before, &after)?,
+        None => compare_and_say(args, &mut out, registry, here)?,
+    };
     out.flush().map_err(write_failed)?;
     Ok(code)
 }
@@ -301,6 +321,10 @@ fn compare_and_say(
     }
     let [(before, before_provider), (after, after_provider)] = <[_; 2]>::try_from(sides)
         .map_err(|_| CliError::Failed("two files were not found".to_owned()))?;
+    if args.names {
+        say("--names lists the paths that differ between two folders; these are files.")?;
+        return Ok(2);
+    }
     let options = FileOptions {
         compare: CompareOptions {
             ignore: args.ignore,
@@ -372,6 +396,88 @@ fn compare_and_say(
                 say(&row)?;
             }
         }
+    }
+    Ok(code)
+}
+
+/// The two places when both are folders; `None` sends the pair to the
+/// file compare, which says what is wrong with either.
+fn folder_pair(args: &DiffArgs, registry: &Registry, here: &Place) -> Option<(Place, Place)> {
+    let ctx = OpContext::new();
+    let folder = |typed: &str| {
+        let place = Place::resolve(typed, here).ok()?;
+        let entry = registry.resolve(&place).ok()?.stat(&place, &ctx).ok()?;
+        (entry.kind == EntryKind::Folder).then_some(place)
+    };
+    Some((folder(&args.before)?, folder(&args.after)?))
+}
+
+/// Two folders, through lane CS's compare: the count line that adds up
+/// ("5 differences in 10 items: ..."), how the rows were verified, then
+/// one row a difference, problems first; `--brief` the count line only;
+/// `--names` the relative paths that differ, NUL-separated. Exit 0 the
+/// same, 1 different, 2 trouble (a row that could not be read, or a
+/// compare that could not start).
+fn compare_folders(
+    args: &DiffArgs,
+    out: &mut dyn Write,
+    registry: &Registry,
+    before: &Place,
+    after: &Place,
+) -> Result<i32, CliError> {
+    let say = |out: &mut dyn Write, line: &str| writeln!(out, "{line}").map_err(write_failed);
+    if args.format != Format::Words {
+        say(
+            out,
+            "Two folders are said in words; --format compares two files.",
+        )?;
+        return Ok(2);
+    }
+    let control = diroxide_ops::JobControl::new();
+    let quiet = |_: &diroxide_ops::sync::CompareProgress| {};
+    let comparison = match diroxide_ops::sync::compare_dirs(
+        registry,
+        before,
+        after,
+        &diroxide_ops::sync::CompareCriteria::default(),
+        &control,
+        &quiet,
+    ) {
+        Ok(comparison) => comparison,
+        Err(error) => {
+            let mut sentence = error.to_string();
+            if !sentence.ends_with('.') {
+                sentence.push('.');
+            }
+            say(out, &sentence)?;
+            return Ok(2);
+        }
+    };
+    let counts = comparison.counts();
+    let code = if counts.unreadable > 0 {
+        2
+    } else if counts.differences() > 0 {
+        1
+    } else {
+        0
+    };
+    if args.names {
+        let separator = comparison.separator().to_string();
+        for row in comparison
+            .rows
+            .iter()
+            .filter(|row| !matches!(row.state, RowState::Same | RowState::Skipped))
+        {
+            write!(out, "{}\0", row.names.join(&separator)).map_err(write_failed)?;
+        }
+        return Ok(code);
+    }
+    if args.brief {
+        say(out, &comparison.count_line())?;
+        return Ok(code);
+    }
+    for line in comparison.lines(false) {
+        say(out, &line)?;
     }
     Ok(code)
 }
@@ -552,6 +658,71 @@ mod tests {
                 "Added lines 51 to 53, 3 lines",
             ]
         );
+    }
+
+    /// Two made folders: `same.txt` alike, `notes.txt` different in size,
+    /// `plan.md` only in the first, `old.txt` only in the second.
+    fn two_folders() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        for side in ["here", "there"] {
+            std::fs::create_dir(dir.path().join(side)).unwrap();
+        }
+        let write = |path: &str, text: &str| std::fs::write(dir.path().join(path), text).unwrap();
+        write("here/notes.txt", "notes, longer here");
+        write("there/notes.txt", "notes");
+        write("here/plan.md", "plan");
+        write("there/old.txt", "old");
+        let same = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+        for side in ["here", "there"] {
+            let path = dir.path().join(side).join("same.txt");
+            std::fs::write(&path, "same").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_modified(same)
+                .unwrap();
+        }
+        dir
+    }
+
+    fn diff_in(dir: &tempfile::TempDir, list: &[&str]) -> (i32, String) {
+        let here = Place::parse(dir.path().to_str().unwrap()).unwrap();
+        let parsed = parse(&args(list)).unwrap();
+        let mut out = Vec::new();
+        let code = run_with(&parsed, &mut out, &Registry::with_local(), &here).unwrap();
+        (code, String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn two_folders_say_the_count_line_then_the_rows() {
+        let dir = two_folders();
+        let (code, text) = diff_in(&dir, &["here", "there"]);
+        assert_eq!(code, 1, "{text}");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines[0],
+            "3 differences in 4 items: 1 different, 1 only here, 1 only there. 1 same."
+        );
+        assert!(lines[0].starts_with("3 differences in 4 items"));
+        assert!(lines[1].starts_with("Compared by size and time"), "{text}");
+        assert!(text.contains("plan.md"), "{text}");
+        assert!(text.contains("old.txt"), "{text}");
+        assert!(!text.contains("same.txt"), "{text}");
+        let (code, text) = diff_in(&dir, &["--brief", "here", "there"]);
+        assert_eq!((code, text.lines().count()), (1, 1));
+        let (code, text) = diff_in(&dir, &["-0", "here", "there"]);
+        assert_eq!(code, 1);
+        let mut names: Vec<&str> = text.split('\0').filter(|n| !n.is_empty()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["notes.txt", "old.txt", "plan.md"]);
+        // The same folder twice is refused as trouble, in words.
+        let (code, text) = diff_in(&dir, &["here", "here"]);
+        assert_eq!(code, 2, "{text}");
+        assert!(text.starts_with("Cannot compare: "), "{text}");
+        // A format other than words is for two files.
+        let (code, text) = diff_in(&dir, &["--format", "json", "here", "there"]);
+        assert_eq!(code, 2, "{text}");
     }
 
     #[test]

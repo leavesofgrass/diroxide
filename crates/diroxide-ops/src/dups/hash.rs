@@ -1,8 +1,8 @@
 //! The full hash behind the duplicate finder, as a trait the caller
-//! fills: the app passes one over `diroxide-meta`'s BLAKE3
-//! (`checksum::compute_reader` with `Algorithm::Blake3`), so the finder
-//! and the Checksum command share one hasher. [`Sha256Hasher`] is this
-//! crate's own, over the `sha2` it already has.
+//! fills. [`Blake3Hasher`] is the default, over the same `blake3` crate
+//! `diroxide-meta`'s Checksum command uses, so a duplicate's hash and
+//! its checksum agree. [`Sha256Hasher`] is this crate's other, over the
+//! `sha2` it already has.
 
 use std::io::{ErrorKind, Read};
 
@@ -24,6 +24,41 @@ pub trait ContentHasher {
         cancel: &CancelToken,
         on_step: &mut dyn FnMut(u64),
     ) -> Result<Vec<u8>, VfsError>;
+}
+
+/// BLAKE3, read in [`STEP`] steps: the duplicate finder's default.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Blake3Hasher;
+
+impl ContentHasher for Blake3Hasher {
+    fn name(&self) -> &'static str {
+        "BLAKE3"
+    }
+
+    fn hash(
+        &self,
+        reader: &mut dyn Read,
+        cancel: &CancelToken,
+        on_step: &mut dyn FnMut(u64),
+    ) -> Result<Vec<u8>, VfsError> {
+        let mut hasher = blake3::Hasher::new();
+        let mut buffer = vec![0u8; STEP];
+        let mut done = 0u64;
+        loop {
+            cancel.check()?;
+            let filled = fill(reader, &mut buffer, cancel)?;
+            if filled == 0 {
+                break;
+            }
+            hasher.update(&buffer[..filled]);
+            done += filled as u64;
+            on_step(done);
+            if filled < buffer.len() {
+                break;
+            }
+        }
+        Ok(hasher.finalize().as_bytes().to_vec())
+    }
 }
 
 /// SHA-256 over `sha2`, read in [`STEP`] steps.

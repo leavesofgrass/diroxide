@@ -32,10 +32,54 @@ pub const REPORTS_FOLDER: &str = "conversions";
 pub fn recipe_book(paths: Option<&Paths>) -> RecipeBook {
     let mut book = RecipeBook::built_in();
     if let Some(paths) = paths {
+        // The converters of the plugins the owner enabled, unchanged
+        // since (lane FX's `enabled_converters`, AW's request 4), before
+        // the owner's own file, whose recipe of the same id wins.
+        for converter in plugin_converters(paths) {
+            book.add_converter(&converter);
+        }
         let config = diroxide_config::load(paths);
         book.add_serialized(&config.conversions.recipes, &RecipeSource::User);
     }
     book
+}
+
+/// The converters the plugins in the plugins and components folders
+/// declare, of those the owner enabled and that have not changed since
+/// his consent; none when he enabled none.
+fn plugin_converters(paths: &Paths) -> Vec<diroxide_ops::convert::ConverterParts> {
+    use diroxide_plugins::script::installed::{Installed, scan};
+    let os = diroxide_plugins::manifest::Os::current();
+    let plugins: Vec<diroxide_plugins::PluginInfo> = [paths.plugins_dir(), paths.components_dir()]
+        .iter()
+        .filter(|folder| folder.is_dir())
+        .flat_map(|folder| scan(folder, os))
+        .filter_map(|item| match item {
+            Installed::Plugin(entry) => {
+                entry
+                    .report
+                    .manifest
+                    .clone()
+                    .map(|manifest| diroxide_plugins::PluginInfo {
+                        manifest,
+                        folder: entry.folder.clone(),
+                        enabled: true,
+                    })
+            }
+            Installed::Script(_) => None,
+        })
+        .collect();
+    if plugins.iter().all(|p| p.manifest.converters.is_empty()) {
+        return Vec::new();
+    }
+    // The plugins' state folder, where Manage plugins keeps the consent.
+    let consent =
+        diroxide_plugins::script::consent::ConsentStore::open(&paths.state_dir.join("plugins"));
+    diroxide_plugins::converters::enabled_converters(
+        &plugins,
+        &consent,
+        diroxide_components::sha256_hex,
+    )
 }
 
 /// The kept reports' shelf in the state folder.
@@ -284,6 +328,48 @@ mod tests {
             diroxide_config::recipes::RECIPE_PLACEHOLDERS.to_vec(),
             diroxide_ops::convert::placeholders::PLACEHOLDERS.to_vec()
         );
+    }
+
+    /// A plugin's converter, as lane FX's test of `enabled_converters`
+    /// declares one.
+    const CONVERTER_PLUGIN: &str = r#"[plugin]
+id = "pandoc-extra"
+name = "Pandoc extra"
+version = "0.1.0"
+description = "Converts Org files to Word."
+license = "MIT"
+protocol = 1
+
+[[converter]]
+id = "org-word"
+name = "Org to Word"
+from = { extensions = ["org"] }
+to = [{ id = "docx", name = "Word document", extension = "docx" }]
+needs = ["pandoc"]
+argv = ["pandoc", "{input}", "-o", "{output}"]
+"#;
+
+    /// AW's request 4: an enabled plugin's converter is in the book, one
+    /// not enabled offers none.
+    #[test]
+    fn an_enabled_plugins_converter_is_in_the_recipe_book() {
+        use diroxide_plugins::manifest::Manifest;
+        use diroxide_plugins::script::consent::{ConsentStore, Kind, plugin_fingerprint};
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::new(dir.path().join("config"), dir.path().join("state"));
+        let folder = paths.plugins_dir().join("pandoc-extra");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join(Manifest::FILE), CONVERTER_PLUGIN).unwrap();
+        let id = "pandoc-extra-org-word-docx";
+        assert!(recipe_book(Some(&paths)).get(id).is_none(), "not enabled");
+        let manifest = Manifest::from_toml(CONVERTER_PLUGIN).unwrap();
+        let now = plugin_fingerprint(&manifest, &folder, diroxide_components::sha256_hex).unwrap();
+        ConsentStore::open(&paths.state_dir.join("plugins"))
+            .enable("pandoc-extra", Kind::Plugin, now)
+            .unwrap();
+        let book = recipe_book(Some(&paths));
+        assert!(book.get(id).is_some(), "{:?}", book.problems());
+        assert!(recipe_book(None).get(id).is_none());
     }
 
     /// The registry types a file by its name, with its group.

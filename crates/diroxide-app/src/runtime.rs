@@ -79,6 +79,13 @@ mod saved_queue;
 mod space;
 // The readers of the background type check (lane TA).
 mod typing;
+// Reserved for alpha 5's app lanes by the pre-wiring step (lane P5):
+// batch rename (RA), compare and synchronize (SA), duplicates (DA), the
+// flat view, collections and recent files (LA).
+mod duplicates;
+mod lists;
+mod renaming;
+mod syncing;
 
 pub(crate) use space::{question_lines, room_words};
 
@@ -200,6 +207,14 @@ pub trait Launcher: Send + Sync {
     /// first (the owner's answer 74).
     fn editor(&self) -> OsString;
 
+    /// The editor the person chose outside diroxide, `$VISUAL` then
+    /// `$EDITOR`, when one is set: the runtime puts it before textweaver
+    /// found on the path, and [`Launcher::editor`]'s platform choice
+    /// after both (lane AF). None by default.
+    fn chosen_editor(&self) -> Option<OsString> {
+        None
+    }
+
     /// Whether [`Launcher::run`] waits for the program to end, the
     /// terminal handed over: the terminal frontend's launcher does, and
     /// the app hears [`AppEvent::ProgramEnded`]. A launcher that starts
@@ -254,11 +269,15 @@ impl Launcher for SystemLauncher {
         (OsString::from("/bin/sh"), vec![OsString::from("-c")])
     }
 
+    fn chosen_editor(&self) -> Option<OsString> {
+        ["VISUAL", "EDITOR"]
+            .into_iter()
+            .find_map(|name| std::env::var_os(name).filter(|e| !e.is_empty()))
+    }
+
     fn editor(&self) -> OsString {
-        for name in ["VISUAL", "EDITOR"] {
-            if let Some(editor) = std::env::var_os(name).filter(|e| !e.is_empty()) {
-                return editor;
-            }
+        if let Some(editor) = self.chosen_editor() {
+            return editor;
         }
         if cfg!(windows) {
             OsString::from("notepad.exe")
@@ -553,6 +572,9 @@ pub struct Runtime {
     hook: Option<TerminalHook>,
     /// The `editor` setting, when it names a program.
     editor: Option<OsString>,
+    /// Where F4 looks for textweaver when no editor is chosen (lane AF);
+    /// tests give none, so no lookup depends on the machine.
+    editor_lookup: Option<diroxide_tools::ToolRegistry>,
     /// The archive provider in the registry, for the pack, unpack and test
     /// runners and for forgetting a locked archive.
     archives: Option<Arc<ArchiveProvider>>,
@@ -685,6 +707,7 @@ impl Runtime {
             launcher: Arc::new(SystemLauncher),
             hook: None,
             editor: None,
+            editor_lookup: None,
             archives,
             archive_settings,
             archive_secrets: Arc::new(Mutex::new(HashMap::new())),
@@ -874,11 +897,41 @@ impl Runtime {
 
     /// Sets the editor from the `editor` setting: a program's name on the
     /// path or its full path; empty leaves the choice to the launcher
-    /// (`$VISUAL`, `$EDITOR`, then the platform's). A changed setting
+    /// (`$VISUAL`, `$EDITOR`), then textweaver when
+    /// [`Runtime::with_editor_lookup`] finds it, then the platform's. A
+    /// changed setting
     /// reaches here through [`Request::SaveSetting`] too.
     pub fn set_editor(&mut self, editor: &str) {
         let editor = editor.trim();
         self.editor = (!editor.is_empty()).then(|| OsString::from(editor));
+    }
+
+    /// The same runtime making textweaver the editor for F4 when the
+    /// tools registry finds it (`tw`, the owner's suggestion of November
+    /// 6, 2026) and no editor is chosen: the `editor` setting, then
+    /// `$VISUAL` and `$EDITOR`, then textweaver, then the platform's
+    /// editor. textweaver turned off in `tools.toml` is passed over.
+    pub fn with_editor_lookup(mut self, tools: diroxide_tools::ToolRegistry) -> Self {
+        self.editor_lookup = Some(tools);
+        self
+    }
+
+    /// The editor F4 starts: the `editor` setting, the launcher's chosen
+    /// editor, textweaver when found, then the launcher's own.
+    fn editor_program(&self) -> OsString {
+        if let Some(editor) = self.editor.clone() {
+            return editor;
+        }
+        if let Some(editor) = self.launcher.chosen_editor() {
+            return editor;
+        }
+        let textweaver = self.editor_lookup.as_ref().and_then(|tools| {
+            match tools.find(crate::quickview::TEXTWEAVER) {
+                Ok(diroxide_tools::ToolStatus::Found(program)) => Some(program.into_os_string()),
+                _ => None,
+            }
+        });
+        textweaver.unwrap_or_else(|| self.launcher.editor())
     }
 
     /// The same runtime running helper programs through `tools`: the tools
@@ -1290,6 +1343,23 @@ impl Runtime {
                     }
                     shared.send(AppEvent::Planned {
                         job: job.id,
+                        result,
+                    });
+                });
+            }
+            Request::PlanMoves { request, moves } => {
+                // Moves into several folders, planned by the engine so the
+                // checks and the before-move hooks are any move's (lane AF).
+                self.scheduler.planned(&request);
+                let engine = self.engine.clone();
+                let control = JobControl::new();
+                self.worker(move |shared| {
+                    let sink = forward_sink(request.id, shared, &engine, &control);
+                    let result = engine
+                        .plan_moves(&request, &moves, &control, &sink)
+                        .map(Box::new);
+                    shared.send(AppEvent::Planned {
+                        job: request.id,
                         result,
                     });
                 });
@@ -1735,6 +1805,11 @@ impl Runtime {
                     )));
                 }
             }
+            // Reserved for alpha 5's app lanes (lane P5).
+            Request::RenameBatch(ask) => self.rename_request(*ask),
+            Request::Sync(ask) => self.sync_request(*ask),
+            Request::Duplicates(ask) => self.dups_request(*ask),
+            Request::Lists(ask) => self.lists_request(*ask),
             Request::SaveTabSets(sets) => {
                 if let Some(paths) = &self.paths
                     && let Err(error) = crate::tabs::save(paths, &sets)
@@ -2442,10 +2517,7 @@ impl Runtime {
                         "",
                     )
                 })?;
-                let editor = self
-                    .editor
-                    .clone()
-                    .unwrap_or_else(|| self.launcher.editor());
+                let editor = self.editor_program();
                 let mut args = Vec::new();
                 if takes_line(&editor) {
                     args.push(OsString::from(format!("+{line}")));
@@ -2462,10 +2534,7 @@ impl Runtime {
                         "",
                     )
                 })?;
-                let editor = self
-                    .editor
-                    .clone()
-                    .unwrap_or_else(|| self.launcher.editor());
+                let editor = self.editor_program();
                 (editor, vec![OsString::from(path)])
             }
             SpawnKind::Program { program, args, .. } => {
@@ -3557,6 +3626,96 @@ mod tests {
             ]
             .map(OsString::from)
         );
+    }
+
+    /// A recorder with an editor chosen in the environment, as `$EDITOR`.
+    struct Chosen(Recorder);
+
+    impl Launcher for Chosen {
+        fn run(&self, program: &Program) -> Result<Option<i32>, String> {
+            self.0.run(program)
+        }
+        fn shell(&self) -> (OsString, Vec<OsString>) {
+            self.0.shell()
+        }
+        fn editor(&self) -> OsString {
+            self.0.editor()
+        }
+        fn chosen_editor(&self) -> Option<OsString> {
+            Some(OsString::from("envEditor"))
+        }
+    }
+
+    #[test]
+    fn textweaver_is_the_editor_when_found_and_nothing_else_is_chosen() {
+        let folder = tempfile::tempdir().unwrap();
+        let name = if cfg!(windows) { "tw.exe" } else { "tw" };
+        let tw = folder.path().join(name);
+        std::fs::write(&tw, b"").unwrap();
+        let path_var = Some(folder.path().as_os_str().to_owned());
+        let found = || diroxide_tools::ToolRegistry::builtin().with_path(path_var.clone());
+        let here = Place::parse(env!("CARGO_MANIFEST_DIR")).unwrap();
+        let file = here.join("Cargo.toml").unwrap();
+        let spawn = |runtime: &mut Runtime| {
+            runtime.request(Request::Spawn(Box::new(Spawn {
+                kind: SpawnKind::Editor(file.clone()),
+                folder: here.clone(),
+                other: here.clone(),
+                cursor: None,
+                selection: Vec::new(),
+            })));
+            runtime.poll();
+        };
+        // Found, nothing chosen: textweaver, with the file.
+        let recorder = Arc::new(Recorder::default());
+        let mut runtime = Runtime::with_local()
+            .with_launcher(recorder.clone())
+            .with_editor_lookup(found());
+        spawn(&mut runtime);
+        // The setting comes first.
+        runtime.set_editor("myeditor");
+        spawn(&mut runtime);
+        // Windows names it with PATHEXT's ending, in PATHEXT's case.
+        let used: Vec<String> = lock(&recorder.programs)
+            .iter()
+            .map(|p| p.program.to_string_lossy().to_lowercase())
+            .collect();
+        let tw = tw.to_string_lossy().to_lowercase();
+        assert_eq!(used, [tw.as_str(), "myeditor"]);
+        // $VISUAL or $EDITOR comes before textweaver.
+        let chosen = Arc::new(Chosen(Recorder::default()));
+        let mut runtime = Runtime::with_local()
+            .with_launcher(chosen.clone())
+            .with_editor_lookup(found());
+        spawn(&mut runtime);
+        assert_eq!(
+            lock(&chosen.0.programs)[0].program,
+            OsString::from("envEditor")
+        );
+        // Not found, or turned off in tools.toml: the platform's editor.
+        let mut off = diroxide_config::ToolsConfig::default();
+        off.tools.insert(
+            crate::quickview::TEXTWEAVER.to_owned(),
+            diroxide_config::ToolOverride {
+                path: None,
+                disabled: true,
+                needed: false,
+            },
+        );
+        for tools in [
+            diroxide_tools::ToolRegistry::builtin().with_path(None),
+            found().with_overrides(off),
+        ] {
+            let recorder = Arc::new(Recorder::default());
+            let mut runtime = Runtime::with_local()
+                .with_launcher(recorder.clone())
+                .with_editor_lookup(tools);
+            spawn(&mut runtime);
+            assert_eq!(
+                lock(&recorder.programs)[0].program,
+                OsString::from("testeditor")
+            );
+        }
     }
 
     #[test]

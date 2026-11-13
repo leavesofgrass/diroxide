@@ -63,6 +63,12 @@ pub mod startup;
 pub mod state;
 // Tabs: their words and the saved tab sets (alpha 5, lane TB).
 pub mod tabs;
+// Reserved for alpha 5's app lanes by the pre-wiring step (lane P5):
+// each lane's requests and notes (RA, SA, DA, LA).
+pub mod dups_ui;
+pub mod lists;
+pub mod rename_batch;
+pub mod sync_ui;
 // The Settings Tools page's rows (alpha 4, lane VA).
 pub mod tools_page;
 // Watch this folder (W3t).

@@ -370,6 +370,9 @@ pub fn command() -> Command {
         .subcommand(convert_command())
         .subcommand(info_command())
         .subcommand(sum_command())
+        .subcommand(rename_command())
+        .subcommand(dups_command())
+        .subcommand(sync_command())
         .subcommand(no_help(
             Command::new("serve")
                 .about("Serve the app over JSON-RPC on standard input and output")
@@ -660,6 +663,148 @@ fn sum_command() -> Command {
                 .value_hint(ValueHint::FilePath)
                 .help("The files, or with --check the list"),
         )
+}
+
+/// An option that takes a value.
+fn valued(name: &'static str, value: &'static str, help: &'static str) -> Arg {
+    Arg::new(name).long(name).value_name(value).help(help)
+}
+
+/// `diro rename` as `cmd/rename.rs` reads it (alpha 5's lane CX), for
+/// completion only.
+fn rename_command() -> Command {
+    Command::new("rename")
+        .about("Rename many names by a rule, the preview first")
+        .arg(valued("in", "FOLDER", "Rename the entries of FOLDER").value_hint(ValueHint::DirPath))
+        .arg(valued(
+            "filter",
+            "EXPRESSION",
+            "With --in, the entries the filter keeps",
+        ))
+        .arg(flag("hidden", "With --in, hidden entries too"))
+        .arg(flag("stdin", "Rename the paths on standard input"))
+        .arg(flag(
+            "from-pairs",
+            "Old path, a tab, new name, one pair a line",
+        ))
+        .arg(flag("null", "Standard input is NUL-separated").short('0'))
+        .arg(valued("find", "TEXT", "Replace this text"))
+        .arg(valued(
+            "regex",
+            "PATTERN",
+            "Replace what this pattern matches",
+        ))
+        .arg(valued(
+            "replace",
+            "TEXT",
+            "What the text or pattern becomes",
+        ))
+        .arg(flag("all", "Every match, not only the first"))
+        .arg(flag("ignore-case", "Find without regard to case").short('i'))
+        .arg(valued(
+            "template",
+            "TEXT",
+            "Make the name anew from a template",
+        ))
+        .arg(valued("start", "N", "The template's first counter"))
+        .arg(valued("step", "N", "What the counter adds each time"))
+        .arg(valued("width", "N", "The counter's fewest digits"))
+        .arg(
+            Arg::new("case")
+                .long("case")
+                .value_parser(["lower", "upper", "title", "sentence"])
+                .help("Change the case"),
+        )
+        .arg(
+            Arg::new("apply-to")
+                .long("apply-to")
+                .value_parser(["stem", "ext", "name"])
+                .help("The part the rules change; stem by default"),
+        )
+        .arg(valued(
+            "preset",
+            "NAME",
+            "A preset from rename-presets.toml",
+        ))
+        .arg(
+            valued("recipe", "FILE", "A recipe file in the presets' shape")
+                .value_hint(ValueHint::FilePath),
+        )
+        .arg(flag("portable", "The presets beside the program"))
+        .arg(flag("dry-run", "Print the preview and rename nothing").short('n'))
+        .arg(flag("yes", "Rename without asking").short('y'))
+        .arg(
+            Arg::new("path")
+                .num_args(0..)
+                .value_hint(ValueHint::AnyPath)
+                .help("The entries to rename"),
+        )
+}
+
+/// `diro dups` as `cmd/dups.rs` reads it (alpha 5's lane CX), for
+/// completion only.
+fn dups_command() -> Command {
+    Command::new("dups")
+        .about("Find duplicate files, the count first, then each group")
+        .arg(
+            Arg::new("keep")
+                .long("keep")
+                .value_parser(["oldest", "newest", "shortest", "name", "first"])
+                .help("Say what would be marked, keeping one copy a group"),
+        )
+        .arg(
+            valued(
+                "keep-in",
+                "FOLDER",
+                "Keep the copies in FOLDER, mark the others",
+            )
+            .value_hint(ValueHint::DirPath),
+        )
+        .arg(
+            Arg::new("format")
+                .long("format")
+                .value_parser(["text", "tsv", "json"])
+                .help("How to write what was found"),
+        )
+        .arg(flag("null", "Print only the paths, NUL-separated").short('0'))
+        .arg(flag("empty", "Group empty files too"))
+        .arg(flag("bytes", "Compare the bytes too, after the hash"))
+        .arg(flag("yes", "Read without asking, however much").short('y'))
+        .arg(
+            Arg::new("path")
+                .required(true)
+                .num_args(1..)
+                .value_hint(ValueHint::DirPath)
+                .help("The folders to search"),
+        )
+}
+
+/// `diro sync` as `cmd/sync.rs` reads it (alpha 5's lane CX), for
+/// completion only.
+fn sync_command() -> Command {
+    Command::new("sync")
+        .about("Compare two folders, then copy by the plan")
+        .arg(
+            Arg::new("mode")
+                .long("mode")
+                .value_parser(["update", "both", "mirror"])
+                .help("update by default; mirror also removes there, to the trash"),
+        )
+        .arg(
+            Arg::new("by")
+                .long("by")
+                .value_parser(["time", "size", "content"])
+                .help("What decides the same; size and time by default"),
+        )
+        .arg(valued(
+            "tolerance",
+            "SECONDS",
+            "Times this close count as the same",
+        ))
+        .arg(flag("dry-run", "Print the plan and change nothing").short('n'))
+        .arg(flag("yes", "Run without asking").short('y'))
+        .arg(named("here", "The folder here").value_hint(ValueHint::DirPath))
+        .arg(named("there", "The folder there").value_hint(ValueHint::DirPath))
 }
 
 /// `diro doctor` as `cmd/doctor.rs` reads it (alpha 4's lane K), for

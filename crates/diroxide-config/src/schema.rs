@@ -307,6 +307,22 @@ const LARGE_FILES: &[Choice] = &[
     choice("bytes", "compare them byte by byte"),
 ];
 
+const RENAME_EDITOR_LINES: &[Choice] = &[
+    choice("keyed", "new name, then the old name in brackets"),
+    choice("plain", "one new name a line"),
+];
+
+const RENAME_PREVIEW_ORDERS: &[Choice] = &[
+    choice("problems_first", "problems first, then the panel's order"),
+    choice("panel", "the panel's order"),
+];
+
+const DUP_HIDDEN: &[Choice] = &[
+    choice("panel", "as the panel shows them"),
+    choice("include", "always read"),
+    choice("leave_out", "always left out"),
+];
+
 const FRONTENDS: &[Choice] = &[
     choice("auto", "the GUI on a desktop, else the terminal"),
     choice("gui", "the GUI"),
@@ -348,7 +364,7 @@ use SettingGroup as G;
 use SettingKind as K;
 
 /// Every setting, in Settings list order.
-pub const SCHEMA: [SettingInfo; 111] = [
+pub const SCHEMA: [SettingInfo; 119] = [
     SettingInfo {
         key: "layout",
         name: "Layout",
@@ -1489,6 +1505,96 @@ pub const SCHEMA: [SettingInfo; 111] = [
         kind: SettingKind::Choice(LARGE_FILES),
         default: "\"ask\"",
         help: "What a compare does with a file over the text compare limit.",
+        arrives: None,
+    },
+    // Alpha 5's settings, once, by the pre-wiring step (lane P5): the
+    // folder compare, batch rename, duplicates and the standard input list.
+    SettingInfo {
+        key: "compare.folder_tolerance_seconds",
+        name: "Folder compare time slack",
+        group: G::Compare,
+        kind: SettingKind::Number {
+            min: 2,
+            max: 3600,
+            unit: "seconds",
+        },
+        default: "2",
+        help: "How far apart two modified times may be and still count as the same when comparing folders. Never under two, the step of FAT drives.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "compare.folder_hour_shift",
+        name: "Folder compare hour shift",
+        group: G::Compare,
+        kind: K::Flag,
+        default: "false",
+        help: "Times exactly an hour apart count as the same when comparing folders, as a FAT drive shows them across daylight saving.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "rename.editor_lines",
+        name: "Rename editor lines",
+        group: G::Safety,
+        kind: SettingKind::Choice(RENAME_EDITOR_LINES),
+        default: "\"keyed\"",
+        help: "How Batch rename writes the names for your text editor. Keyed lines keep each file's old name, so a line moved or removed still finds its file.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "rename.preview_order",
+        name: "Rename preview order",
+        group: G::Safety,
+        kind: SettingKind::Choice(RENAME_PREVIEW_ORDERS),
+        default: "\"problems_first\"",
+        help: "The order of Batch rename's preview. Counters always number in the panel's order.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "duplicates.ask_above_gb",
+        name: "Duplicates ask above",
+        group: G::Search,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 100_000,
+            unit: "GB",
+        },
+        default: "10",
+        help: "Find duplicates asks first when it would read more than this.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "duplicates.hidden",
+        name: "Duplicates hidden files",
+        group: G::Search,
+        kind: SettingKind::Choice(DUP_HIDDEN),
+        default: "\"panel\"",
+        help: "Which hidden files Find duplicates reads.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "lists.stdin_paths",
+        name: "Paths from standard input",
+        group: G::Search,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1_000_000,
+            unit: "paths",
+        },
+        default: "16384",
+        help: "The most paths diro reads from standard input into a list.",
+        arrives: None,
+    },
+    SettingInfo {
+        key: "lists.stdin_mib",
+        name: "Standard input limit",
+        group: G::Search,
+        kind: SettingKind::Number {
+            min: 1,
+            max: 1024,
+            unit: "MiB",
+        },
+        default: "64",
+        help: "The most diro reads from standard input for a list of paths.",
         arrives: None,
     },
     SettingInfo {
