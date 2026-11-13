@@ -160,7 +160,7 @@ Compare folders opens a list of criteria first, and the first row is the one tha
 - "By size and time, within 2 seconds": two files are the same when their sizes are the same and their times are within two seconds. Two seconds is the step of a FAT drive, so it is the least a tolerance can be.
 - "By size only, times not looked at".
 - "By contents, reads both files": files of the same size are read block by block, and stop at the first difference.
-- "Subfolders", "Hidden items" and "Ignore a 1 hour shift" are switches, each said with its state after it: "Subfolders: on", "Hidden items: on", "Ignore a 1 hour shift: off". Enter on one turns it on or off. Hidden items are included whatever the panel shows.
+- "Subfolders", "Hidden items" and "Ignore a 1 hour shift" are switches, each said with its state after it: "Subfolders: on", "Hidden items: on", "Ignore a 1 hour shift: off". Enter on one turns it on or off. Hidden items start from what the panel shows, so a panel that hides them starts with "Hidden items: off"; the switch changes it for this compare.
 
 Enter on a By row compares with that row. Escape closes the list and says "Nothing was compared." The tolerance and the hour shift start from two settings: `compare.folder_tolerance_seconds` (2; 2 to 3600) and `compare.folder_hour_shift` (off), in the Compare group of Settings. An hour shift is for a FAT drive across daylight saving, where every time is an hour off.
 
@@ -187,9 +187,9 @@ The actions are the last rows of the list:
 - "Open the differences as a list" opens them in the general list, where the usual keys for a list apply: "Differences as a list, 3 files".
 - "Compare again" compares with the criteria as they are now.
 
-Enter on a Different row opens a comparison of the two files, the same Compare files screens as above.
+Enter on a Different row opens a comparison of the two files, the same Compare files screens as above. It starts by saying "Comparing notes.txt here with notes.txt there", and the key that views the file at a change has its two files.
 
-If you change the tolerance or the hour shift setting after a compare, the result no longer matches: "Compare again: the options changed", and Synchronize waits for it.
+If you change the tolerance or the hour shift setting after a compare, the result no longer matches: "Compare again: the options changed", and Synchronize waits for it. If a folder watcher reports a change under either folder, the result shows a first row, "Result is old: folders changed", and Synchronize refuses until you Compare again: "Result is old: folders changed. Compare again first."
 
 ### From a shell
 
