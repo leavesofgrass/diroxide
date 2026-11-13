@@ -2358,6 +2358,25 @@ fn a_changed_folder_makes_the_plan_old_and_synchronize_now_refuses() {
     assert_eq!(rig.f.app().dialog_purpose(), Some("SyncPlan"));
 }
 
+/// The palette opens over a results list in the window too (lane AS's
+/// item 1), and when it closes the focus is back on the list's row.
+#[test]
+fn the_palette_opens_over_a_results_list_and_gives_the_focus_back() {
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-palette-")
+        .tempdir()
+        .unwrap();
+    let mut rig = flat_on(root.path());
+    let (role, row) = rig.focus_node();
+    assert_eq!(role, Role::ListBoxOption);
+    rig.press("ctrl+shift+p");
+    assert_eq!(rig.f.app().dialog_purpose(), Some("Palette"));
+    assert_eq!(rig.focus_key().0, Role::EditableComboBox);
+    rig.press("escape");
+    assert_eq!(rig.f.app().dialog_purpose(), Some("Results"));
+    assert_eq!(rig.focus_node(), (Role::ListBoxOption, row));
+}
+
 /// The parts the purposes are opened in, each its own test.
 const PARTS: usize = 6;
 
