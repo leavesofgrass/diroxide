@@ -301,7 +301,6 @@ pub fn run_with(
         job: JobId::new(1),
         control,
         sink: relay.as_ref(),
-        hooks: None,
         hooks_asked: false,
     };
     let result = session.drive(&relay, &mut unanswered, || run_sync(&plan, &env));
