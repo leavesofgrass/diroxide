@@ -2108,6 +2108,62 @@ fn the_lists_of_alpha_5_open_in_the_lister_with_a_name_and_a_focus() {
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
+/// A row whose words change when it is chosen is said once, never twice
+/// (R34's commit 34). A duplicate's copy kept again: the app reopens the
+/// copies with the focus on the changed row, so the focus says
+/// "Kept: NAME" and the live region leaves the app's same line out (the
+/// settled double). A synchronize row left out: the live region says the
+/// new line once.
+#[test]
+fn a_changed_row_is_said_once() {
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-once-")
+        .tempdir()
+        .unwrap();
+    let mut rig = dups_groups(root.path());
+    rig.run("dups.keep");
+    rig.press("enter");
+    rig.settle_until(|rig| rig.f.app().dialog_purpose() == Some("DupsGroups"));
+    choose(&mut rig, "Group 1");
+    let before = rig.spoken().len();
+    let said_before = rig.said().len();
+    let shown = rig.f.app().dialog().map(|(id, _)| id);
+    choose(&mut rig, "Marked: ");
+    // A new dialog: the screen reader follows the focus into it and says
+    // its focused row, so the change is heard there.
+    assert_ne!(rig.f.app().dialog().map(|(id, _)| id), shown);
+    // The app said it: "Kept copy-two.txt".
+    assert!(
+        rig.said()[said_before..]
+            .iter()
+            .any(|m| m.text == "Kept copy-two.txt"),
+        "{:?}",
+        rig.said()
+    );
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    assert!(
+        !heard.iter().any(|s| s.contains("Kept copy-two.txt")),
+        "said twice: {heard:?}"
+    );
+    let (_, row) = rig.focus_node();
+    assert!(row.starts_with("Kept: copy-two.txt"), "{row}");
+
+    let root = tempfile::Builder::new()
+        .prefix("gui-it-once-")
+        .tempdir()
+        .unwrap();
+    let mut rig = sync_plan(root.path());
+    choose(&mut rig, "Copy there: a.txt");
+    let before = rig.spoken().len();
+    answer(&mut rig, "toggle");
+    let heard: Vec<String> = rig.spoken()[before..].to_vec();
+    let left: Vec<&String> = heard
+        .iter()
+        .filter(|s| s.starts_with("Left out: a.txt"))
+        .collect();
+    assert_eq!(left.len(), 1, "{heard:?}");
+}
+
 /// The parts the purposes are opened in, each its own test.
 const PARTS: usize = 6;
 
