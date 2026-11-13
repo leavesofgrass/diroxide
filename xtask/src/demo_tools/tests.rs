@@ -456,17 +456,14 @@ fn the_steps_name_every_step_and_the_start() {
     }
 }
 
-/// Every step ends with the lanes whose words it waits on, and every
-/// line to hear fits a 40-cell line.
+/// Every step has the lanes' words as built, none waits on a lane, and
+/// every line to hear fits a 40-cell line.
 #[test]
-fn every_step_names_its_lanes_and_every_quoted_line_fits_40_cells() {
+fn every_step_has_built_words_and_every_quoted_line_fits_40_cells() {
     let text = steps_text(Path::new(r"D:\dirocheck5"));
     let steps: Vec<&str> = text.split("\n\n").skip(1).collect();
     assert_eq!(steps.len(), 10);
-    for step in steps {
-        let last = step.trim_end().lines().last().unwrap();
-        assert!(last.starts_with("To be checked: "), "{step}");
-    }
+    assert!(!text.contains("To be checked"), "{text}");
     let mut quoted = 0;
     for line in text.lines() {
         for (at, part) in line.split('"').enumerate() {
