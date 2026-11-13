@@ -1169,6 +1169,11 @@ impl App {
                     diroxide_core::names::display_name(new)
                 )
             }
+            // A batch: "Renamed 50 files." (17 cells), counted by the
+            // names changed, not by the steps a swap takes (lane AS).
+            Then::Renamed(pairs) if clean && pairs.len() > 1 && done > 0 => {
+                format!("Renamed {}.", count(pairs.len() as u64, "file", "files"))
+            }
             Then::Undid(kind) if clean => undo_words(kind.as_ref(), done),
             _ if cancel_line.is_some() => cancel_line.clone().unwrap_or_default(),
             _ if clean && report.kind == JobKind::Trash => catalog::moved_to_trash(done).text,

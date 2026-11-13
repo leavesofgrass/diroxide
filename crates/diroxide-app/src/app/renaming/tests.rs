@@ -325,12 +325,9 @@ fn yes_reads_the_folder_again_and_renames_in_one_job_with_one_undo() {
         ["trip-0001.jpg", "trip-0002.jpg", "trip-0003.jpg"]
     );
     assert!(f.app.dialogs.is_empty(), "the batch's dialogs close");
-    // The engine's own report for now; "Renamed 3 files." waits on the
-    // contract request for the finish line in app/files.rs.
-    assert!(
-        said.contains(&"Rename finished: 3 done.".to_owned()),
-        "{said:?}"
-    );
+    // The batch's finish line (lane AS): "Renamed 50 files." is 17 cells.
+    assert!(said.contains(&"Renamed 3 files.".to_owned()), "{said:?}");
+    assert_eq!("Renamed 50 files.".chars().count(), 17);
     // One undo brings every name back.
     f.run(ids::UNDO);
     assert_eq!(f.names(), PHOTOS);
