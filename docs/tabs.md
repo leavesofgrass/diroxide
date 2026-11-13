@@ -102,6 +102,8 @@ In the window:
 - Ctrl+Shift+Tab: Previous tab.
 - Alt+1 to Alt+9: Go to tab 1 to tab 9.
 
+On macOS the window uses Command where the key lists say Ctrl, except for Next tab and Previous tab, which stay on Control, since macOS keeps Command+Tab for switching programs. [The GUI](gui.md#the-two-lists) says how the window says tabs, after the place in its title, in each panel's list name and in the other panel's header.
+
 In a terminal only Ctrl+T and Ctrl+W are bound. Terminals send Ctrl+Tab as plain Tab, Windows Terminal switches its own tabs on it, and GNOME Terminal does the same on Alt with a digit, so diroxide does not use them there: [terminals](terminals.md) says which terminals keep which keys. In a terminal, reach the rest through the View menu's Tabs submenu (Alt+V, then N), which holds every tab command, or through the palette.
 
 Every tab command is in the palette, and a key you prefer is set in the Keys list. [Every key](keyboard.md) lists all 26 tab commands with their ids, from `tab.new` to `tab.load-set`, and [customizing keys](customizing-keys.md) says how to change a key.

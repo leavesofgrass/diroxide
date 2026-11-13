@@ -13,23 +13,23 @@ Alpha 5 is the planned alpha.8, in the making: tabs, batch rename, compare and s
 - The preview is the plan: one row for each entry in words, state first, problems first by default (`rename.preview_order`), with a count line first, "2 problems. 46 of 50 files will change." Rows can be skipped, edited by hand, numbered apart (Make names unique) or left out together (Skip problems).
 - Swaps, rings and case-only changes go through temporary names; a name that is taken, two rows with one new name, a reserved character, a name too long, a counter below zero and an entry inside an archive are problem rows. Rename now refuses with a problem left, and asks otherwise, on No. The folders are read again before the run, a change is refused in words, and one job has one undo record.
 - Edit names in editor writes keyed lines to `rename-NUMBER.txt` in the state folder (`rename.editor_lines`: keyed or plain), then asks "Done editing?" and reads the names back, refusing a changed count in words.
-- F2 with several entries marked opens Batch rename; Rename one by one keeps the old stepping. Space skips a row in the preview and F2 edits it. A finished batch says "Renamed 3 files."
+- F2 with several entries marked opens Batch rename; Rename one by one keeps the old stepping. Space skips a row in the preview and F2 edits it. A finished batch says "Renamed 3 files." The question names the folder, "Rename 3 files in photos? No is the default. y or n", and the care line is "3 need care. 47 of 50 will change."
 - `diro rename`: paths, `--in FOLDER` with `--filter`, `--stdin` and `--from-pairs`; `--find`, `--regex`, `--template`, `--case`, `--apply-to`, `--preset`, `--recipe`, `--dry-run` and `--yes`. Exit codes 0, 1, 2 and 3.
-- Details placeholders (`{meta:FIELD}`) were cut from this alpha: no values are fed to them.
+- Details placeholders (`{meta:FIELD}`) were cut from this alpha: they are no longer offered in the template's placeholder list, and no values are fed to them.
 - New guide: [Batch rename](docs/rename.md).
 
 ### Compare folders and synchronize
 
 - Compare folders compares this panel's folder with the other's by size and time (`compare.folder_tolerance_seconds`, 2 and no less; `compare.folder_hour_shift`), by size only or by contents, as a cancellable job. Statuses are words: only here, only there, different with its reason, type differs, unreadable, skipped. The count line adds up: "17 differences in 1,202 items: 12 only here, 3 only there, 2 different. 1,185 same."
-- Synchronize makes a plan in five modes (update the other panel, update this panel, both ways with the newer winning, mirror to either panel), one row for each change, problems first, removals listed. A row can be left out or turned around. The question starts on No. A replace or a removal sends the old file to the trash first and says "for good" where the place has none. The run is one job with one undo record, reads every place again first, and skips a step whose file changed.
+- Synchronize makes a plan in five modes (update the other panel, update this panel, both ways with the newer winning, mirror to either panel), one row for each change, problems first, removals listed. Space leaves a row out or takes it back, and a row can be turned around; the two "copy toward" commands have no default keys. The plan's title is short, "Update the other panel: 2 changes". When the panels' folder watchers report a change under a compared folder, the result says "Result is old: folders changed" and Synchronize refuses until Compare again. Hidden items start from the panel's setting, and Enter on a Different row compares the two files. The question starts on No. A replace or a removal sends the old file to the trash first and says "for good" where the place has none. The run is one job with one undo record, reads every place again first, and skips a step whose file changed.
 - `before_copy` and `before_delete` hooks are asked about a synchronize's copies and removals, and the after events are split the same way.
-- `diro diff` takes two folders (`--brief`, `--names`), and `diro sync HERE THERE` has `--mode`, `--by`, `--tolerance`, `--dry-run` and `--yes`; nothing is replaced or removed for good from a shell.
+- `diro diff` takes two folders (`--brief`, `--names`), and `diro sync HERE THERE` has `--mode`, `--by`, `--tolerance`, `--dry-run` and `--yes`, and prints the same short row words as the window ("Replace there: notes.txt, newer here"; its `--json` fields are unchanged); nothing is replaced or removed for good from a shell.
 - New guide: [Synchronize](docs/synchronize.md); [Compare](docs/compare.md) gained the folder compare.
 
 ### Duplicates
 
 - Find duplicates groups by size, then the first and last blocks, then a BLAKE3 hash, then bytes on request. Empty files and hard links to one file are said and left out. A search that would read more than `duplicates.ask_above_gb` (10) asks first, on No; `duplicates.hidden` follows the panel by default.
-- The groups open largest waste first with a count line, "1 group, 2 files, 11 bytes to free". Five rules choose the copy to keep and never a whole group. The only way out is the trash, after every kept and marked copy is read again; a group whose kept copy changed is refused whole.
+- The groups open largest waste first with a count line, "1 group, 2 files, 11 bytes to free". Five rules choose the copy to keep and never a whole group. The only way out is the trash, after every kept and marked copy is read again; a group whose kept copy changed is refused whole. Space or Enter on a copy changes its mark. Hidden files follow the panel and are left out before hashing and before the estimate (`DupOptions::include_hidden`). The report starts with the bytes freed, "Freed 4.0 KB: moved 2 items to the trash."
 - `diro dups` prints the same, with `--keep`, `--keep-in`, `--format tsv` and `json`, `-0` and `--bytes`, and removes nothing.
 - New guide: [Duplicates](docs/duplicates.md).
 
@@ -37,9 +37,19 @@ Alpha 5 is the planned alpha.8, in the making: tabs, batch rename, compare and s
 
 - The flat view lists every file below a folder, streamed so the first rows show at once, with depth, files only and hidden files as settings of the form.
 - Collections are named lists of places, one file each in the `saved` folder of the state folder. Save as collection, Collect (to "Collected"), rename, remove (to the trash, on No) and Remove missing items; taking an item out never touches its file. A saved search is the live kind and runs on open.
-- Recent files keeps what you opened with Enter or edited with F4, never F3, in `recent.toml`; `recent_files` turns it off.
-- `diro -` reads paths from standard input, NUL-separated or one a line (`--lines`), at most 16,384 paths or 64 MiB (`lists.stdin_paths`, `lists.stdin_mib`); `diro ls -` reads the same way. It prints its list as lines for now.
+- Save as collection, Collect and Remove missing items work on the list on the screen from the palette, the menus and the list's Actions, and the list stays open (`App::list_places`).
+- Copy or Move out of a flat view asks "Keep folders, or all in one folder?", starting on Keep folders; it works for a Move one folder level down, and Copy and deeper folders say "for now". All in one folder never overwrites in silence. The refining filter matches the folder words.
+- Recent files keeps what you opened with Enter or edited with F4, from a list too, never F3, in `recent.toml`; `recent_files` turns it off.
+- `diro -` reads paths from standard input, NUL-separated or one a line (`--lines`), at most 16,384 paths or 64 MiB (`lists.stdin_paths`, `lists.stdin_mib`); `diro ls -` reads the same way. On a terminal it opens the list in the app ("3 paths from standard input, 1 missing"), and with output redirected it prints lines; `--cwd-file` is not handled.
 - New guide: [Flat view, collections and recent files](docs/collections.md).
+
+### The window, the build and the quick wins
+
+- In the window, with more than one tab the tab follows the place in the title, the panel's list name and the other panel's header; each panel's list says its columns after its name. Thirty-six new dialogs open with a name and a named focus (152 purposes, from 116), with goldens for the rename preview, the synchronize plan and the duplicate groups. On macOS Next tab and Previous tab stay on Control.
+- Said job lines end with a period ("Finding duplicates in work."), and the jobs line keeps none.
+- A change to the column setting reaches every parked and closed tab. A plugin enabled while tabs are parked still updates only the shown tabs' plugin columns.
+- `cargo xtask version --check` compares the version in `[workspace.package]` with every place that carries it, and is run before a tag.
+- `column/format` is served and the protocol reference says so. Bursts already read the date to the second.
 
 ### Notepad fixes and the app follow-ups to alpha 4
 

@@ -25,7 +25,7 @@ The modes are a list titled "Synchronize how:", and Enter on one makes the plan.
 
 ## The plan
 
-The plan is a list. Its name is a summary that says the mode first and then counts, in the form "Update the other panel: 2 problems, 4 to copy there, 2 skipped, 1 same; 5 bytes to copy". When the plan has nothing to do it says so: "Mirror to the other panel: nothing to do, 1 same".
+The plan is a list. Its name is short, the mode and the number of changes: "Update the other panel: 2 changes". The whole summary is said once as the plan opens, mode first and then counts, in the form "Update the other panel: 2 problems, 4 to copy there, 2 skipped, 1 same; 5 bytes to copy". When the plan has nothing to do it says so: "Mirror to the other panel: nothing to do, 1 same".
 
 Each row starts with its action, then the name, then the reason. Problems come first, then the removals are listed so you read them before the end:
 
@@ -43,10 +43,10 @@ Two notes can follow the summary. "6 changes cannot be undone: no trash there." 
 
 ### Changing one row
 
-Enter on a row opens a short list of what can change on it:
+Space on a row leaves it out, or takes it back in, and says the row's new line once: "Left out: plan.md, would copy there". Enter on a row opens a short list of what can change on it:
 
 - "Leave out", which skips the row, and "Take back in", which restores it
-- "Copy toward the other panel" and "Copy toward this panel", to choose a direction
+- "Copy toward the other panel" and "Copy toward this panel", to choose a direction. These two commands have no default keys, since no pair of keys is free in all five presets. They are in this list and the palette, and [customizing keys](customizing-keys.md) can give them keys (`sync.toward-here`, `sync.toward-there`).
 - "Put back the suggestion", to undo your change on that row
 
 The new line of the row is read back after each change. The plan's last rows are the actions:
@@ -55,6 +55,8 @@ The new line of the row is read back after each change. The plan's last rows are
 - "Mode: Update the other panel" opens the modes again.
 
 Changing the tolerance or the hour shift setting after the compare blocks the run until you Compare again: "Compare again: the options changed".
+
+When the panels' folder watchers report a change under either compared folder, the result and the plan show a first row, "Result is old: folders changed", and it is said once. Synchronize now then refuses: "Result is old: folders changed. Compare again first." Choose Compare again, then plan again. Only the changes the panels' own watchers see count; a change in a folder neither panel shows is not noticed, and the run's own check still skips a step whose file changed.
 
 ## The question
 
@@ -87,7 +89,7 @@ diro sync --dry-run photos backup
 - `--mode MODE`: `update` (the default) copies what is missing or newer here to there. `both` copies each way and the newer wins. `mirror` makes there the same as here, with every removal listed and sent to the trash.
 - `--by WHAT`: `time` (size and time, the default), `size` or `content`.
 - `--tolerance SECONDS`: times this close count as the same. 2 by default.
-- `--dry-run` or `-n`: print the plan and change nothing. The plan is lines, problems first.
+- `--dry-run` or `-n`: print the plan and change nothing. The plan is lines, problems first, in the same short words as the window: "Copy there: plan.md, only here", "Replace there: notes.txt, newer here", "Trash there: old.txt, only there".
 - `--yes` or `-y`: run without asking. Without it the question starts on No: "Synchronize 2 items? y or n". With nobody to answer: "Nothing synchronized. Add --yes to run."
 
 Nothing is replaced or removed for good from a shell. A plan that would change a place with no trash is refused before anything runs: "Refused: some changes cannot be undone." The run reads every place again first, as above, and Ctrl+C stops it.
@@ -98,10 +100,12 @@ The exit codes are 0 for done or a dry run, 1 for could not run, refused, a No, 
 
 - The compare and the run start at once. They do not wait in the queue behind other jobs.
 - Compare progress is spoken but does not update the Jobs list's line.
-- Hidden items are always included by default, whatever the panel shows. Switch them off in the criteria list.
 - "By contents" is covered by the engine's tests, and has not been tried by hand on a large tree.
 - No rsync engine, no saved synchronize tasks and no Save as script yet.
-- The plan view's Enter lists the changes on a row. Space to leave a row out, and keys for the two directions, are not in this build: [known limits](known-limits.md#compare-folders-and-synchronize) says what is waiting.
+- The staleness notice depends on the panels' folder watchers, as said above.
+- The two "copy toward" commands have no default keys.
+
+[Known limits](known-limits.md#compare-folders-and-synchronize) has the same list.
 
 ## See also
 

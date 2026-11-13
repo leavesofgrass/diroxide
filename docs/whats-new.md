@@ -12,22 +12,22 @@ This section is for alpha 5, which has not been released. It lists what can be r
 - The rules replace text or a pattern, insert and remove by position, make a name from a template with a counter and dates, change case and tidy spaces. A pattern refuses look-around and a backreference in words, with the way round them. Passes chain, and presets keep a set of rules by name in `rename-presets.toml`.
 - Swaps, rings and a change of case only go through temporary names. A name already taken is a problem row, never an overwrite. The question starts on No, the folders are read again before it runs, and one Ctrl+Z puts every name back.
 - Edit names in editor opens the new names in your text editor, one a line, each with its old name in brackets so a moved line still finds its file.
-- F2 with several entries marked opens Batch rename. Rename one by one keeps the old stepping. `diro rename` is the same engine for a shell, with `--dry-run`. [Batch rename](rename.md) is the new guide.
+- F2 with several entries marked opens Batch rename. Rename one by one keeps the old stepping. In the preview Space skips a row and F2 edits it. The question names the folder, "Rename 3 files in photos? No is the default. y or n", and a finished batch says "Renamed 3 files." `diro rename` is the same engine for a shell, with `--dry-run`. [Batch rename](rename.md) is the new guide.
 
 ### Compare folders and synchronize
 
 - Compare folders says what differs between the panels' folders, by size and time (within two seconds), by size only, or by contents: "17 differences in 1,202 items: 12 only here, 3 only there, 2 different. 1,185 same." Rows say here and there, never left and right, and start with their status: "Only here, inner.txt, in sub".
-- Synchronize turns the result into a plan in five modes: update either panel, mirror to either panel, or both ways with the newer file winning. The plan is read before anything happens, a row can be left out or turned around, and the question starts on No. A replaced or removed file goes to the trash first, one Ctrl+Z undoes the run, and a file that changed after the compare is skipped.
+- Synchronize turns the result into a plan in five modes: update either panel, mirror to either panel, or both ways with the newer file winning. The plan is read before anything happens, Space leaves a row out or takes it back, a row can be turned around, and the question starts on No. When a folder changes after the compare, the result says "Result is old: folders changed" and Synchronize waits for Compare again. The plan's title is short, "Update the other panel: 2 changes", and `diro sync` prints the same short row words. A replaced or removed file goes to the trash first, one Ctrl+Z undoes the run, and a file that changed after the compare is skipped.
 - `diro diff` compares two folders too, and `diro sync` synchronizes from a shell, with `--dry-run`. [Synchronize](synchronize.md) is the new guide, and [Compare files](compare.md) says what two folders do.
 
 ### Duplicates
 
 - Find duplicates finds files with the same contents in this folder, the marked entries or both panels. It groups by size, then by the first and last blocks, then by a full BLAKE3 hash, and compares bytes on request. The groups read largest waste first: "1 group, 2 files, 11 bytes to free".
-- Five rules choose the copy to keep, and none marks a whole group. The only way out is the trash, after every kept and every marked copy is read again. `diro dups` prints the same groups and never removes anything. [Duplicates](duplicates.md) is the new guide.
+- Five rules choose the copy to keep, and none marks a whole group. Space or Enter on a copy changes its mark. Hidden files follow the panel and are left out before anything is hashed. The only way out is the trash, after every kept and every marked copy is read again, and the report starts with the bytes freed: "Freed 4.0 KB: moved 2 items to the trash." `diro dups` prints the same groups and never removes anything. [Duplicates](duplicates.md) is the new guide.
 
 ### Lists that are not folders
 
-- The flat view lists every file below a folder in one list. Collections keep named lists of places, and removing an item never touches its file. Saved searches run again when opened. Recent files lists what you opened or edited with Enter and F4. `diro -` makes a list from paths another program prints. [Flat view, collections and recent files](collections.md) is the new guide.
+- The flat view lists every file below a folder in one list. Collections keep named lists of places, and removing an item never touches its file. Saved searches run again when opened. Recent files lists what you opened or edited with Enter and F4, from a list too. Save as collection, Collect and Remove missing items work on the list on the screen, from the palette, the menus and the list's Actions, and the list stays open. Copy or Move out of a flat view asks "Keep folders, or all in one folder?", and Keep folders works for a Move one folder level down. `diro -` makes a list from paths another program prints, and opens it in the app on a terminal. [Flat view, collections and recent files](collections.md) is the new guide.
 
 ### Tabs
 
@@ -41,6 +41,12 @@ This section is for alpha 5, which has not been released. It lists what can be r
 ### Settings, files and privacy
 
 - Remember recent files (`recent_files`, on) keeps up to 50 files you opened or edited from diroxide in `recent.toml` in the state folder, on this computer only. Off: nothing is kept, and the list is emptied. [Privacy](privacy.md) says that `session.toml`, `tab-sets.toml`, the saved searches and `recent.toml` hold paths.
+
+### The window and the build
+
+- In the window, with more than one tab in a panel, the tab follows the place in the title ("work, tab 2 of 2 - diroxide"), the panel's list name and the other panel's header. Each panel's list says its columns after its name: "Columns: Name, Type, Size, Modified". On macOS Next tab and Previous tab stay on Control.
+- A change to the column setting reaches every tab, parked and closed ones too.
+- `cargo xtask version --check` checks every place that carries the version, before a tag.
 
 ### Smaller changes
 

@@ -25,7 +25,7 @@ Each item below was planned for alpha 4, is known, and was left for a later alph
 - Conversions and watched folders: a plugin's converters are not in the Convert list, and a plugin's command in a watched folder's task still pauses the task. The program has no Save report command. `diro convert --report FILE` writes one.
 - Columns: a field can give a sort value in alpha 5, and the duration and dimensions columns sort as numbers; other fields still sort by their words. Field columns have no header or grid. A cell says "reading" for a kind of file that no reader takes, until the readers have been through it.
 - Encryption: the Encryption plugin writes its files itself, so Undo for an age command lasts for the session only. In alpha 5, gpg's ASCII armor is offered as two commands, "Encrypt with gpg, as text" and "Sign with gpg, as text".
-- Photos: the Taken column reads the date to the minute. Alpha 5 reads it to the second as a field of its own, `image.taken_second`, which the details list leaves out and the bursts do not use yet. Move into month folders is planned by the engine in alpha 5, so a plugin's before-move hook runs for it. A row of the details list has no help of its own.
+- Photos: the Taken column reads the date to the minute. Alpha 5 reads it to the second as a field of its own, `image.taken_second`, which the details list leaves out. Bursts already read the date to the second. Move into month folders is planned by the engine in alpha 5, so a plugin's before-move hook runs for it. A row of the details list has no help of its own.
 - Speed: listing a folder and reading each file's details cost more than they did in the build of October 16, 2026. Alpha 5 removes the two causes, and a quiet machine has not measured it yet. [Other limits](#other-limits) has the numbers.
 - The window: a paste under Wayland with no XWayland still reads nothing, and no real Wayland compositor has been tried.
 
@@ -41,7 +41,7 @@ Each item below was planned for alpha 4, is known, and was left for a later alph
 - A script can start slowly: about a tenth of a second for bash and Python, and a third of a second to over a second and a half for PowerShell 5.1, on the test machine. Plugins stay running between uses for five minutes, so the cost is paid once.
 - PowerShell 7 has not been tried. Windows PowerShell 5.1 has, with the policy override. A `.cmd` or `.bat` script runs on Windows only.
 - On Windows, bash is Git for Windows' bash. The `bash.exe` in the system folder is WSL's launcher, and diroxide refuses it. Without Git for Windows, bash scripts do not run, and diroxide says so.
-- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/changed` (nothing tells the panels that a plugin's cells are stale) and `completion/query`. `column/format`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit` are served since alpha 4. [The protocol reference](dev/plugin-protocol.md) is generated from the code's own table and still marks `column/format` as shape only, though the panels call it for a plugin's columns. A plugin can declare the shapes and will be called when the feature that needs them arrives.
+- Hooks run for copy, move, delete, rename and new folder (before and after), and for entering a folder and changing the selection. The manifest also accepts `folder_changed`, and nothing sends it yet. [Hooks](hooks.md) has the rest. Shape only for now: `column/changed` (nothing tells the panels that a plugin's cells are stale) and `completion/query`. `column/format`, `place/describe`, `ui/form`, `ui/show_diff`, `fs/stage` and `fs/commit` are served since alpha 4. A plugin can declare the shapes and will be called when the feature that needs them arrives.
 - A plugin's form or diff has few limits checked yet: nothing stops 5,000 fields, a default of 1 MB, a label of 90 cells or a title of 120 cells, and an empty id or label is not refused. Unknown keys are dropped in silence, and a title that already names the plugin gets the name twice. Binary content cannot travel in JSON, so a diff side with NUL bytes is read as text and compared byte by byte, and `encoding` and `place` on a diff side are dropped.
 - Watching a folder through a plugin's place is a shape without a working end-to-end test. SFTP cannot watch a folder, so a remote panel does not refresh by itself; open the folder again to see changes.
 - The Convert command does not list a plugin's converters yet, and the quick view does not call a plugin's previewer. `diro plugin preview` and `diro plugin convert` run a previewer or a converter on one file.
@@ -170,7 +170,7 @@ This section is for alpha 5, which has not been released. [Tabs](tabs.md) is the
 
 - No tab bar is drawn, in the window or in the terminal. A tab is said in words ("Documents, tab 2 of 3") and the tab list shows them all. Nothing about tabs is said while a panel has one tab.
 - A locked tab that is alone in its panel shows no lock in the title line, since nothing about tabs is said with one tab. Lock tab says the state when you press it.
-- Changing the column setting updates only the tab that is shown.
+- A plugin enabled or disabled while tabs are parked updates only the shown tabs' plugin columns, to keep a tab switch cheap. Other column changes reach every tab, parked and closed ones too.
 - A tab you are not in does not watch its folder. It lists the folder again when you come back to it.
 - Undo close tab holds the last 16 closed tabs, for this session only. No command deletes or renames a saved tab set; a set is replaced by saving under its name again.
 - A tab set and a session keep each tab's folder, cursor row, sort, hidden files, history and lock. Marks, the filter and the columns are not kept.
@@ -182,12 +182,9 @@ This section is for alpha 5, which has not been released. [Tabs](tabs.md) is the
 This section is for alpha 5, which has not been released. [Compare files](compare.md#compare-two-folders) and [Synchronize](synchronize.md) are the guides.
 
 - The compare and the run start at once. They do not wait in the transfer queue behind other jobs. Compare progress is spoken but does not update the Jobs list's line.
-- Hidden items are always included by default, whatever the panel shows. The criteria list has a switch for them.
 - "By contents" is covered by the engine's tests and has not been tried by hand on a large tree.
-- Enter on a row of the plan lists what can change on it. Space to leave a row out or take it back in, and keys for Copy toward this panel and Copy toward the other panel, are not in this build: the rows' own list has them.
-- A result that the folders have outgrown is not marked old. After a change in either folder, Compare again before you Synchronize; a step whose file changed since the compare is skipped, and says so: "changed since the compare; compare again".
-- Enter on a Different row opens a change list of the two files. The key that views the file at the change has no files to open yet from there.
-- `diro sync` prints the engine's longer words for a plan, "Will be removed there: NAME, to the trash", where the window says "Trash there: NAME". The meaning is the same.
+- Copy toward this panel and Copy toward the other panel have no default keys, since no pair is free in all five presets. They are in the row's list of changes and the palette.
+- The stale result ("Result is old: folders changed") is noticed only for changes the panels' own folder watchers report. A step whose file changed since the compare is skipped in any case, and says so: "changed since the compare; compare again".
 - Nothing is replaced or removed for good from a shell: a place with no trash is refused.
 - No rsync engine, no saved synchronize tasks, no Save as script and no compare of an archive by its stored checksums.
 - A compare on an SFTP place, inside an archive or on a plugin's list has not been tried. Nothing here has been heard on NVDA, JAWS or Orca, or read on a Braille display.
@@ -203,17 +200,16 @@ This section is for alpha 5, which has not been released. [Duplicates](duplicate
 - Pause in the Jobs list does not reach the search. Cancel does.
 - The marks are kept in the open dialog and are gone after Escape from the groups list.
 - Yes to the large-read question runs the listing and the quick check again.
-- Hidden files are dropped after the search in this build, so they are still read, and counted in the estimate that the large-read question quotes.
-- The trash report after a duplicates run does not say the bytes freed. The question before it says the size.
 - Nothing here has been tried on a real trash, with a hidden file on Windows, or on a remote place.
 
 ## Batch rename
 
 This section is for alpha 5, which has not been released. [Batch rename](rename.md) is the guide.
 
-- Details placeholders, such as `{meta:exif.date}`, were cut from this alpha. They are in the template's list of placeholders, but the app feeds them no values, so a rule that uses one makes each row a problem: "Problem, no value for {meta:exif.date}". Dates and sizes from the file itself work.
+- Details placeholders, such as `{meta:exif.date}`, were cut from this alpha. They are not in the template's list of placeholders, and the app feeds them no values, so a template typed by hand with one makes each row a problem: "Problem, no value for {meta:exif.date}". Dates and sizes from the file itself work.
 - The rules that need a Unicode table are not built: turning accented letters into plain ones, and changing a Unicode form.
-- The commands in a batch, Next problem, Previous problem, Say both names, Make names unique and the rest, have no keys. The palette cannot open over a dialog, so each is reached by Enter on a row.
+- The commands in a batch, Next problem, Previous problem, Say both names, Make names unique and the rest, have no keys. Each is reached by Enter on a row.
+- The question "Rename 3 files in photos? No is the default. y or n" has its meaning in the first 25 cells, but "No is the default" still ends at cell 43, past a 40-cell line. The window asks "Done editing?" before the editor starts, and does not say "Waiting for your editor. Escape cancels."
 - The plan is made again after every change, on the app's thread. It is fine for hundreds of files and has not been timed for 10,000.
 - Back from an editor in a terminal, diroxide says "Back in diroxide, photos", and an open "Done editing?" question is not said again. No Windows editor other than the default has been tried.
 - `diro rename` has no `--format`, `--accept-care`, `--skip-problems`, `--sort`, `--undo` or `--edit` yet.
@@ -223,12 +219,10 @@ This section is for alpha 5, which has not been released. [Batch rename](rename.
 
 This section is for alpha 5, which has not been released. [Flat view, collections and recent files](collections.md) is the guide.
 
-- The flat view's copy and move do not ask whether to keep the folders, and its refining filter matches names and not the folder text.
+- Keep folders, in the question for Copy and Move out of a flat view, works for a Move one folder level down. Copy says "Keep folders is for Move only, for now." and deeper folders say "Keep folders: one folder level, for now." Both need an engine planner that copies into several folders and makes missing parent folders more than one level deep. A Keep-folders move goes through the job's own question as well.
 - A flat view's rows read "a.txt, in work/b/deep", the way the lister gives them, and its settings are not remembered from one time to the next.
-- Save as collection, Collect and Remove missing items close an open list before they run, so from a list they do not reach the list's places. Use them from the panel for now.
-- A file opened from inside a results list is not kept in the recent files. Enter and F4 in a panel keep it.
 - A collection's items are all checked when it opens, which is slow for a very long one.
-- `diro -` prints its list as lines and does not open it in the app. Its opening options are taken and kept for when it does.
+- `diro -` opens its list in the app on a terminal, and prints it as lines when its output is redirected. It does not handle `--cwd-file`. After it opens, the panel's arrival line may be said after the list's start line.
 - On macOS, `diro -` needs crossterm's `use-dev-tty` feature to read keys with a pipe on standard input; that is a manifest line that is not set yet.
 - Nothing here has been heard on NVDA, JAWS or Orca, or read on a Braille display.
 
@@ -271,7 +265,6 @@ The trash is the default way to delete, and the places where it cannot be truste
 - A volume has 2 seconds to say its free space. A network share that answers in 3 seconds still says "free space not known".
 - Hide changes only the Volumes list. Go to a place still lists a hidden drive in its older words. To list a hidden volume again, take its entry out of `hidden_volumes` in `config.toml`; editing that list in the Settings field has not been tried.
 - Go to a place reads the volumes once a session, so a local volume has no free space there until you open the Volumes list, and a stick plugged in later shows in its older words until you do.
-- An unavailable action reads "Eject, needs the Volume actions plugin, unavailable". The word "unavailable" comes after the reason, not right after the name. A change is waiting.
 - Windows: a restore checks that the name is free just before it puts an item back. A file made in that same instant could be replaced. On Linux and the other freedesktop systems that cannot happen.
 - A restore puts an item back only where it came from. A taken name is left out and said, and is never given another name.
 - A trash with tens of thousands of items has not been tried. The listing comes in batches of 500 and gives up after 30 seconds.
