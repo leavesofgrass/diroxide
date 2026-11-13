@@ -229,7 +229,9 @@ impl Keymap {
                 !system_f_key && !ctrl_space
             });
             for binding in &mut self.bindings {
-                if binding.key.mods.ctrl {
+                // Command+Tab switches apps on macOS: Next tab and
+                // Previous tab stay on Control there (lane AS).
+                if binding.key.mods.ctrl && binding.key.code != KeyCode::Tab {
                     binding.key.mods.ctrl = false;
                     binding.key.mods.meta = true;
                 }
@@ -1098,6 +1100,10 @@ mod tests {
         assert!(mac.keys_for(&ids::SORT_MODIFIED).is_empty());
         assert_eq!(mac.key_text(&ids::SORT_LIST), "Cmd+Shift+S");
         assert_eq!(mac.keys_text(&ids::CONTEXT_MENU), "Shift+F10 or Menu");
+        // Command+Tab is the system's app switcher: the tab keys stay on
+        // Control.
+        assert_eq!(mac.key_text(&ids::TAB_NEXT), "Ctrl+Tab");
+        assert_eq!(mac.key_text(&ids::TAB_PREVIOUS), "Ctrl+Shift+Tab");
         let terminal = Keymap::defaults().for_platform(Platform::MacOs);
         assert_eq!(terminal.key_text(&ids::QUIT), "Ctrl+Q");
         assert_eq!(terminal.key_text(&ids::SORT_MODIFIED), "Ctrl+F5");
