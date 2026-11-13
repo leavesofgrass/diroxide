@@ -130,10 +130,11 @@ notify = "8.2.0"
 trash = { version = "=5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
 sysinfo = "0.36.1"
 dirs = "6.0.0"
-# blake3 always builds with `cc` (a non-optional build dependency), so the
-# native gate fails the day a crate depends on it, even with `pure`. Before
-# the duplicate finder (alpha.8) uses it, the owner decides: a second allow
-# entry for blake3 with `pure`, or a pure-Rust hash (sha2 is declared).
+# blake3 always declares `cc` (a non-optional build dependency), even with
+# `pure`, which compiles no C. The pure-Rust inventory allows it through
+# diroxide-meta only (the owner's answer 45). No other crate may depend on
+# it: the duplicate finder takes its hasher from the caller, who fills it
+# from the meta crate's checksum. Widening the allowance is the owner's call.
 blake3 = { version = "1.8.2", features = ["pure"] }
 # Pins for the components downloader and checksums. Held at 0.10 by alpha
 # 4's contract step (R28's disagreement 15): 0.11's digest traits drop
