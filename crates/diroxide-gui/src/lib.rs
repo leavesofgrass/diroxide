@@ -321,6 +321,7 @@ pub fn panel_grid(panel: &Panel) -> GridModel {
 /// The window's title for the app as it stands: the active panel's place
 /// first, then the program, as the terminal titles its window ("Documents
 /// - diroxide"). A screen reader says it when the window takes the focus.
+///
 /// With more than one tab in the active panel the tab follows the place,
 /// as in the title line: "Documents, tab 2 of 3 - diroxide".
 pub fn window_title(app: &App, program: &str) -> String {
