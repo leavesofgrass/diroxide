@@ -437,6 +437,42 @@ fn a_changed_option_blocks_the_run_until_compare_again() {
     );
 }
 
+/// The folder watcher's change under a compared folder makes the result
+/// and the plan old; Synchronize now refuses until Compare again (lane
+/// AS).
+#[test]
+fn a_changed_folder_makes_the_result_old_until_compare_again() {
+    let fake = folders();
+    let (mut app, mut runtime) = started(&fake);
+    compared(&mut app, &mut runtime);
+    enter(&mut app, &mut runtime, SYNC);
+    enter(&mut app, &mut runtime, &mode_id(SyncMode::UpdateThere));
+    assert_eq!(top(&app), Some("SyncPlan"));
+    // A change somewhere else says nothing.
+    let effects = app.handle(AppEvent::Watched {
+        side: Side::Left,
+        place: local("/elsewhere"),
+        event: diroxide_vfs::WatchEvent::Changed(local("/elsewhere/x.txt")),
+    });
+    assert!(!said(runtime.run_until_idle(&mut app, effects)).contains(&STALE.to_owned()));
+    let effects = app.handle(AppEvent::Watched {
+        side: Side::Right,
+        place: local("/backup"),
+        event: diroxide_vfs::WatchEvent::Changed(local("/backup/old.txt")),
+    });
+    let heard = said(runtime.run_until_idle(&mut app, effects));
+    assert_eq!(heard.iter().filter(|s| *s == STALE).count(), 1, "{heard:?}");
+    cells(STALE, STALE, 30);
+    assert_eq!(labels(&app)[0], STALE);
+    let heard = enter(&mut app, &mut runtime, RUN);
+    assert_eq!(heard, [format!("{STALE}. Compare again first.")]);
+    assert_eq!(top(&app), Some("SyncPlan"));
+    // Compare again gives a fresh result.
+    enter(&mut app, &mut runtime, AGAIN);
+    assert_eq!(top(&app), Some("SyncResult"));
+    assert_ne!(labels(&app)[0], STALE);
+}
+
 #[test]
 fn synchronize_from_the_panel_compares_then_offers_the_modes() {
     let fake = folders();

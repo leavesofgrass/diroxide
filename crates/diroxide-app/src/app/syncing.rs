@@ -81,6 +81,38 @@ pub(super) struct ResultView {
     same: bool,
     /// The one status listed, when the owner chose one.
     only: Option<RowState>,
+    /// A folder compared changed since (the folder watcher said so):
+    /// Synchronize now refuses until Compare again (lane AS).
+    stale: bool,
+}
+
+/// Said when a compared folder changes, and when Synchronize now is
+/// refused for it: 30 cells.
+pub(super) const STALE: &str = "Result is old: folders changed";
+
+/// The row that says so, first in the result and the plan.
+const STALE_ROW: &str = "stale";
+
+impl ResultView {
+    /// Whether a change in `place` touches one of the compared folders.
+    fn touches(&self, place: &Place) -> bool {
+        [&self.setup.here, &self.setup.there]
+            .into_iter()
+            .any(|folder| place == folder || place.is_within(folder))
+    }
+}
+
+impl SyncWants {
+    /// The compare result this dialog stands on, when it has one.
+    fn result_mut(&mut self) -> Option<&mut ResultView> {
+        match self {
+            SyncWants::Criteria(_) => None,
+            SyncWants::Result(view) | SyncWants::Modes(view) => Some(view),
+            SyncWants::Plan(view)
+            | SyncWants::RowActions(view, _)
+            | SyncWants::Confirm(view, _) => Some(&mut view.result),
+        }
+    }
 }
 
 /// A plan as the plan view shows it.
@@ -280,6 +312,9 @@ fn result_list(view: &ResultView) -> ListModel {
         .into_iter()
         .map(|index| ListRow::new(format!("r{index}"), result.rows[index].line(separator)))
         .collect();
+    if view.stale {
+        rows.insert(0, ListRow::new(STALE_ROW, STALE));
+    }
     let counts = result.counts();
     if counts.differences() > 0 {
         rows.push(ListRow::new(SYNC, "Synchronize: plan the changes"));
@@ -382,6 +417,9 @@ fn plan_list(view: &PlanView) -> ListModel {
         .into_iter()
         .map(|index| ListRow::new(format!("p{index}"), plan_line(plan, index)))
         .collect();
+    if view.result.stale {
+        rows.insert(0, ListRow::new(STALE_ROW, STALE));
+    }
     let counts = plan.counts();
     let acting = counts.acting();
     let run = if acting == 0 {
@@ -948,6 +986,40 @@ impl App {
         effects
     }
 
+    /// The folder watcher saw a change in `place` (lane AS): every open
+    /// compare result and plan on one of its folders becomes old, says
+    /// "Result is old: folders changed" once, and the list on top shows
+    /// it first; Synchronize now refuses until Compare again.
+    pub(super) fn sync_folder_changed(&mut self, place: &Place) -> Vec<Effect> {
+        let mut changed = false;
+        for open in &mut self.opens {
+            if let Purpose::Organize(wants) = &mut open.purpose
+                && let Wants::Sync(wants) = wants.as_mut()
+                && let Some(view) = wants.result_mut()
+                && !view.stale
+                && view.touches(place)
+            {
+                view.stale = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return Vec::new();
+        }
+        let list = match self.top_sync() {
+            Some(SyncWants::Result(view)) => Some((result_list(&view), SyncWants::Result(view))),
+            Some(SyncWants::Plan(view)) => Some((plan_list(&view), SyncWants::Plan(view))),
+            _ => None,
+        };
+        if let Some((list, wants)) = list {
+            self.replace_sync_top(list, wants);
+        }
+        vec![
+            Effect::Redraw(Redraw::All),
+            self.say(Message::warning(STALE)),
+        ]
+    }
+
     /// A key in a synchronize list (lane AS): Space on a plan row leaves
     /// it out or takes it back in, and the row's new line is said once;
     /// `None` for any other key or list.
@@ -986,6 +1058,9 @@ impl App {
     /// compare used changed; else the hooks are asked before the
     /// question.
     fn ask_hooks(&mut self, view: PlanView) -> Vec<Effect> {
+        if view.result.stale {
+            return vec![self.say(Message::warning(format!("{STALE}. Compare again first.")))];
+        }
         if view.plan.counts().acting() == 0 {
             return vec![self.say(Message::info(NOTHING_TO_DO))];
         }
@@ -1045,6 +1120,9 @@ impl App {
         let SyncWants::Confirm(view, job) = wants else {
             return Vec::new();
         };
+        if view.result.stale {
+            return vec![self.say(Message::warning(format!("{STALE}. Compare again first.")))];
+        }
         let mut effects = self.close_sync_dialogs();
         let acting = view.plan.counts().acting();
         let line = format!("Synchronize started: {}", count(acting, "item", "items"));
@@ -1162,6 +1240,7 @@ impl App {
             }
         };
         let view = ResultView {
+            stale: false,
             setup: Setup {
                 side,
                 here,

@@ -1998,7 +1998,10 @@ impl App {
                 if self.panel(side).place() == &place {
                     self.quick_view_watch(side, &event);
                 }
-                self.watched(side, &place, &event)
+                // A compare result on this folder is old now (lane AS).
+                let mut effects = self.sync_folder_changed(&place);
+                effects.extend(self.watched(side, &place, &event));
+                effects
             }
             AppEvent::NotWatched { side, place } => self.not_watched(side, &place),
             AppEvent::Places(places) => self.places_arrived(places),
