@@ -99,8 +99,12 @@ impl Guard {
             .name("diroxide-meta".to_owned())
             .stack_size(STACK_BYTES)
             .spawn(move || {
-                let _count = count;
                 let answer = catch_unwind(AssertUnwindSafe(work));
+                // The slot is freed before the answer is sent, so a caller
+                // that asks for its next reader at once finds it free; freed
+                // after, a loaded machine could refuse that next reader as
+                // busy with no reader running (CI run 43373763659).
+                drop(count);
                 let _ = tx.send(answer);
             });
         if spawned.is_err() {
@@ -290,6 +294,20 @@ mod tests {
         );
         hold.send(()).unwrap();
         assert_eq!(first.join().unwrap(), Ok(()));
+    }
+
+    /// Lane PC (CI run 43373763659): a reader's slot is free when its
+    /// answer arrives, so a caller that reads on at once is never refused.
+    /// The slot used to be freed after the answer was sent, and a column
+    /// reader asking for its next reader in that moment was told "busy"
+    /// with no reader running.
+    #[test]
+    fn a_slot_is_free_when_its_answer_arrives() {
+        let guard = Guard::new(1);
+        for round in 0..2000 {
+            assert_eq!(guard.run(Duration::from_secs(5), move || Ok(round)), Ok(round));
+            assert_eq!(guard.running(), 0, "round {round}");
+        }
     }
 
     #[test]
