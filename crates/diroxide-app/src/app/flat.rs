@@ -225,11 +225,9 @@ impl App {
                     line.push(' ');
                     line.push_str(&sentence);
                 }
-                let mut effects = vec![Effect::Redraw(super::Redraw::All)];
                 // The lister's own end: the list stops running, and the
                 // flat view's words are said instead of a search's.
-                effects.extend(self.search_done(list, Err(Message::done(line))));
-                effects
+                self.finish_list(list, Message::done(line))
             }
             Err(message) => self.finish_results_failed(list, message),
         }

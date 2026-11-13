@@ -800,6 +800,23 @@ impl App {
     }
 
     /// A walk for the results failed: it is said, and the list stays.
+    /// A list that streamed ended with its own line (alpha 5, lane AS):
+    /// "Flat view on, 3 files in 3 folders." The list stops running and
+    /// the line is said; an empty list says "Nothing found". A line for
+    /// a list that is no longer on the screen is dropped.
+    pub(super) fn finish_list(&mut self, id: u64, line: Message) -> Vec<Effect> {
+        let Some(search) = self.searching.current.as_mut().filter(|s| s.id == id) else {
+            return Vec::new();
+        };
+        search.running = false;
+        search.paused = false;
+        let empty = search.hits.is_empty();
+        if empty && let Some(list) = self.results_list_mut() {
+            list.set_empty_text("Nothing found");
+        }
+        vec![Effect::Redraw(Redraw::All), self.say(line)]
+    }
+
     pub(super) fn finish_results_failed(&mut self, id: u64, message: Message) -> Vec<Effect> {
         if let Some(search) = self.searching.current.as_mut().filter(|s| s.id == id) {
             search.running = false;
