@@ -119,6 +119,7 @@ impl DupSetup {
         DupOptions {
             min_size: self.least_size(),
             byte_compare: self.byte_compare,
+            include_hidden: self.hidden,
             ask_above: self.ask_above,
             progress_interval: Duration::from_millis(self.interval_ms),
             ..DupOptions::default()
@@ -286,11 +287,9 @@ impl DupView {
     /// was left out: "1 group, 2 files, 5 bytes to free. 1 empty file left
     /// out."
     pub fn start_line(&self) -> String {
+        // The engine's notes say the hidden files left out (lane AS).
         let mut parts = vec![self.result.count_line()];
         parts.extend(self.result.notes());
-        if self.hidden_left_out > 0 {
-            parts.push(hidden_line(self.hidden_left_out));
-        }
         format!("{}.", parts.join(". "))
     }
 
@@ -500,6 +499,18 @@ pub fn trash_question(files: usize, bytes: u64) -> String {
     )
 }
 
+/// The report after duplicates went to the trash (lane AS): the trash's
+/// bytes freed first, then the trash's own sentence: "Freed 4.0 KB:
+/// moved 2 items to the trash. They can be restored."
+pub fn freed_line(items: u64, bytes: u64) -> String {
+    let moved = diroxide_core::catalog::moved_to_trash(items).text;
+    let moved = match moved.strip_prefix("Moved") {
+        Some(rest) => format!("moved{rest}"),
+        None => moved,
+    };
+    format!("Freed {}: {moved}", human_size(bytes))
+}
+
 /// "3 hidden files left out".
 pub fn hidden_line(n: u64) -> String {
     if n == 1 {
@@ -584,6 +595,7 @@ mod tests {
             left_out: Vec::new(),
             empty_left_out: 1,
             small_left_out: 0,
+            hidden_left_out: 0,
             hard_links_left_out: 0,
             unreadable: 0,
             reached_twice: 0,
@@ -635,6 +647,13 @@ mod tests {
         checking.files_done = 3;
         assert_eq!(progress_line(&checking), "Checking again, 3 of 6 files");
         assert_eq!(trash_question(4, 44_000), "Trash 4 copies, 44.0 KB? y or n");
+        let freed = freed_line(2, 4_000);
+        assert_eq!(
+            freed,
+            "Freed 4.0 KB: moved 2 items to the trash. They can be restored."
+        );
+        assert_eq!(cells("Freed 4.0 KB: moved 2 items to the trash."), 41);
+        assert_eq!(cells("Freed 4.0 KB: moved 2 items"), 27);
         assert_eq!(hidden_line(1), "1 hidden file left out");
         assert_eq!(hidden_line(3), "3 hidden files left out");
         let rows = setup().option_rows();
@@ -649,7 +668,11 @@ mod tests {
 
     #[test]
     fn the_groups_open_with_nothing_marked_and_their_count_line_first() {
-        let view = DupView::new(setup(), result(), 2);
+        let found = DupResult {
+            hidden_left_out: 2,
+            ..result()
+        };
+        let view = DupView::new(setup(), found, 2);
         assert_eq!(
             view.start_line(),
             "1 group, 3 files, 4.0 KB to free. 1 empty file left out. 2 hidden files left out."

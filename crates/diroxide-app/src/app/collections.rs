@@ -25,10 +25,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use diroxide_config::RecentAction;
 use diroxide_core::format::{count, grouped};
 use diroxide_core::names::{display_name, spell_out};
-use diroxide_core::{Command, CommandId, EntryKind, ListModel, ListRow, Message, Place, Side};
+use diroxide_core::{Command, CommandId, ListModel, ListRow, Message, Place, Side};
 use diroxide_search::{FlatOptions, SearchHit};
 
 use super::searching::{ListKind, ListOpen};
@@ -89,6 +88,9 @@ pub(super) enum ListsWants {
         /// Depth, files only, hidden.
         options: FlatOptions,
     },
+    /// Copy or move out of a flat view: keep the folders below its root,
+    /// or put everything in one folder (lane AS).
+    FlatCopy(Box<super::flat::FlatCopy>),
     /// The flat view's depth field.
     FlatDepth {
         /// The panel whose folder it lists.
@@ -109,6 +111,7 @@ impl ListsWants {
             ListsWants::RenameName { .. } => "CollectionRename",
             ListsWants::RemoveCollection { .. } => "CollectionRemove",
             ListsWants::FlatForm { .. } => "FlatView",
+            ListsWants::FlatCopy(_) => "FlatCopy",
             ListsWants::FlatDepth { .. } => "FlatViewDepth",
         }
     }
@@ -159,13 +162,9 @@ fn said_name(name: &str) -> String {
 
 impl App {
     /// The commands of the flat view, collections and recent files;
-    /// `None` for any other. Enter and F4 on a file pass through here
-    /// first, to be kept in the recent files, and go on.
+    /// `None` for any other. Files opened with Enter and F4 are kept in
+    /// the recent files by the hook after every event (`keep_recent`).
     pub(super) fn lists_dispatch(&mut self, command: &Command) -> Option<Vec<Effect>> {
-        if command.id == ids::ENTER || command.id == ids::EDIT {
-            self.note_recent(&command.id);
-            return None;
-        }
         let action = route(&command.id)?;
         Some(match action {
             Do::Flat => self.flat_view_toggle(command),
@@ -194,29 +193,19 @@ impl App {
     /// The places of the list on the screen: its marked rows, or all its
     /// rows; empty when the results lister is not on top.
     fn lister_places(&self, focused_only: bool) -> Vec<Place> {
+        if !focused_only {
+            return self.list_places();
+        }
         if !self.lister_on_top() {
             return Vec::new();
         }
         let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last() else {
             return Vec::new();
         };
-        let ids: Vec<String> = if focused_only {
-            list.focused().map(|r| r.id.clone()).into_iter().collect()
-        } else {
-            let marked: Vec<String> = list.selected_ids().into_iter().map(str::to_owned).collect();
-            if marked.is_empty() {
-                list.rows().iter().map(|r| r.id.clone()).collect()
-            } else {
-                marked
-            }
-        };
-        let mut places: Vec<Place> = Vec::new();
-        for place in ids.iter().filter_map(|id| place_of_row(id)) {
-            if !places.contains(&place) {
-                places.push(place);
-            }
-        }
-        places
+        list.focused()
+            .and_then(|r| place_of_row(&r.id))
+            .into_iter()
+            .collect()
     }
 
     /// The Collections list: collections and saved searches, read from
@@ -473,7 +462,9 @@ impl App {
                 if name.is_empty() {
                     return vec![self.say(Message::status("A collection needs a name."))];
                 }
-                let mut effects = self.close_all();
+                // Only the name field closes: the list it was saved from
+                // stays on the screen.
+                let mut effects = self.close_top();
                 let clock = SharedClock(Arc::clone(&self.clock));
                 self.lists_ask(ListsAsk::Add {
                     name: name.to_owned(),
@@ -509,6 +500,10 @@ impl App {
                 root,
                 options,
             } => self.flat_depth_typed(side, root, options, text),
+            ListsWants::FlatCopy(copy) => match row {
+                Some(row) => self.flat_copy_chosen(*copy, &row),
+                None => Vec::new(),
+            },
         }
     }
 
@@ -552,6 +547,7 @@ impl App {
                 root,
                 options,
             } => self.flat_form_again(side, root, options),
+            ListsWants::FlatCopy(copy) => vec![self.say(Message::info(copy.nothing_done()))],
             _ => Vec::new(),
         }
     }
@@ -653,34 +649,6 @@ impl App {
             }
             ListsNote::Say(message) => vec![self.say(message)],
         }
-    }
-
-    /// Enter or F4 on a file in a panel: kept in the recent files while
-    /// the setting is on; a folder, an archive opened as a folder, a
-    /// plugin's row and a name that is not Unicode are not. F3 (view) is
-    /// never kept (question 138).
-    fn note_recent(&mut self, id: &CommandId) {
-        if !self.settings.recent_files || !self.dialogs.is_empty() {
-            return;
-        }
-        let panel = self.panel(self.active);
-        let (Some(entry), Some(place)) = (panel.focused_entry(), panel.focused_place()) else {
-            return;
-        };
-        if entry.is_folder_like()
-            || entry.is_container()
-            || matches!(entry.kind, EntryKind::Item | EntryKind::Archive)
-            || entry.name_not_unicode
-        {
-            return;
-        }
-        let action = if *id == ids::EDIT {
-            RecentAction::Edited
-        } else {
-            RecentAction::Opened
-        };
-        let now = self.now();
-        self.lists_ask(ListsAsk::Record { place, action, now });
     }
 }
 

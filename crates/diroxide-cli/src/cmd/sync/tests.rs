@@ -110,7 +110,8 @@ fn a_dry_run_says_here_and_there_then_the_plan() {
     assert!(lines[2].starts_with("Update the other panel: "), "{text}");
     assert!(text.contains("Copy there: new.txt, only here\n"), "{text}");
     assert!(text.contains("Skip: old.txt, only there, kept\n"), "{text}");
-    assert!(text.contains("Copy there: notes.txt"), "{text}");
+    // Question 135's short words, as the window says them (lane AS).
+    assert!(text.contains("Replace there: notes.txt"), "{text}");
     assert!(text.ends_with("Nothing was synchronized.\n"));
     assert!(!dir.path().join("there").join("new.txt").exists());
     // A mirror lists its removal and still changes nothing.

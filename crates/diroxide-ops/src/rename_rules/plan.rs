@@ -558,7 +558,7 @@ impl RenamePlan {
     /// The count line, first in the dialog and first after every
     /// recompute, the worst news first and inside 40 cells
     /// (`research/bulk-rename.md`): "2 problems. 46 of 50 files will
-    /// change."; "No problems, 3 need care. 47 of 50 change.";
+    /// change."; "3 need care. 47 of 50 will change.";
     /// "47 of 50 files will change. No problems."; "No file would
     /// change."
     pub fn count_line(&self) -> String {
@@ -575,7 +575,7 @@ impl RenamePlan {
             "No file would change.".to_owned()
         } else if care > 0 {
             let verb = if care == 1 { "needs" } else { "need" };
-            format!("No problems, {} {verb} care. {of} change.", grouped(care))
+            format!("{} {verb} care. {of} will change.", grouped(care))
         } else {
             format!("{of} {files} will change. No problems.")
         }
@@ -598,7 +598,7 @@ impl RenamePlan {
     }
 
     /// The confirmation's question, which starts on No: "Rename 47 files
-    /// in D:\photos?"; "Rename 12 files in 3 folders, 1 needs care?".
+    /// in photos?"; "Rename 12 files in 3 folders, 1 needs care?".
     pub fn question(&self) -> String {
         let files = count(self.renaming() as u64, "file", "files");
         let mut folders: Vec<&Place> = Vec::new();
@@ -610,8 +610,13 @@ impl RenamePlan {
                 folders.push(known);
             }
         }
+        // The folder's own name, so "No is the default" stays inside 40
+        // cells; the listing under the question has the paths (lane AS).
         let place = match folders.as_slice() {
-            [one] => format!(" in {one}"),
+            [one] => match one.name() {
+                Some(name) => format!(" in {}", diroxide_core::names::display_name(name)),
+                None => format!(" in {one}"),
+            },
             [] => String::new(),
             many => format!(" in {} folders", many.len()),
         };

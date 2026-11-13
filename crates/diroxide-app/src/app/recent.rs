@@ -1,18 +1,20 @@
 //! Recent files in the app (alpha 5, lane LA): recorded on Enter and F4
-//! in a panel (never F3, question 138) while the `recent_files` setting
+//! in a panel or a list (never F3, question 138; the hook after every
+//! event, lane AS) while the `recent_files` setting
 //! is on, kept in the state folder only, and listed newest first in the
 //! general results lister (`App::open_list` with `ListKind::Recent`),
 //! over `diroxide_config`'s recent files. Each row says how and when the
 //! file was used after its name: "report.md, edited today, 10:00 AM, in
 //! D:\docs".
 
-use diroxide_config::RecentFiles;
-use diroxide_core::{Command, Message, Place, Side};
+use diroxide_config::{RecentAction, RecentFiles};
+use diroxide_core::{Command, Message, Place, PlaceKind, Side};
 use diroxide_search::SearchHit;
 
 use super::searching::{ListKind, ListOpen};
 use super::{App, Effect, Purpose};
 use crate::lists::ListsAsk;
+use crate::request::{Request, SpawnKind};
 
 impl App {
     /// Recent files: the list, newest first, or why there is none.
@@ -63,6 +65,42 @@ impl App {
             streaming: false,
         };
         self.open_list(open).0
+    }
+
+    /// The hook after every event (alpha 5, lane AS): a file opened with
+    /// its program (Enter, in a panel or a list) or started in the editor
+    /// (F4, in a panel or a list) while handling it is kept in the recent
+    /// files, when the setting is on. `from` is the number of requests
+    /// that waited before the event. The viewer (F3) neither opens a file
+    /// externally nor starts the editor, so it is never kept (question
+    /// 138); a file inside an archive or on a plugin's place is not kept.
+    pub(super) fn keep_recent(&mut self, effects: &[Effect], from: usize) {
+        if !self.settings.recent_files {
+            return;
+        }
+        let mut kept: Vec<(Place, RecentAction)> = effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::OpenExternally(place) => Some((place.clone(), RecentAction::Opened)),
+                _ => None,
+            })
+            .collect();
+        for request in self.requests.iter().skip(from) {
+            if let Request::Spawn(spawn) = request
+                && let SpawnKind::Editor(file) | SpawnKind::EditorAt { file, .. } = &spawn.kind
+            {
+                kept.push((file.clone(), RecentAction::Edited));
+            }
+        }
+        if kept.is_empty() {
+            return;
+        }
+        let now = self.now();
+        for (place, action) in kept {
+            if place.kind() == PlaceKind::Local {
+                self.lists_ask(ListsAsk::Record { place, action, now });
+            }
+        }
     }
 
     /// Clear recent files: every one forgotten; no file is touched.

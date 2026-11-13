@@ -14,7 +14,7 @@ use diroxide_ops::FakeProvider;
 use diroxide_vfs::Registry;
 
 use super::*;
-use crate::app::AppOptions;
+use crate::app::{AppEvent, AppOptions};
 use crate::runtime::Runtime;
 
 fn local(path: &str) -> Place {
@@ -139,7 +139,7 @@ fn compare_folders_says_the_count_line_and_lists_the_differences_status_first() 
     let fake = folders();
     let (mut app, mut runtime) = started(&fake);
     let said = compared(&mut app, &mut runtime);
-    assert_eq!(said[0], "Comparing photos here with backup there");
+    assert_eq!(said[0], "Comparing photos here with backup there.");
     let count = "3 differences in 4 items: 1 different, 1 only here, 1 only there. 1 same.";
     assert!(said.iter().any(|line| line == count), "{said:?}");
     cells(count, "3 differences in 4 items", 73);
@@ -192,6 +192,16 @@ fn the_criteria_turn_settings_and_escape_compares_nothing() {
     let fake = folders();
     let (mut app, mut runtime) = started(&fake);
     run(&mut app, &mut runtime, ids::COMPARE_FOLDERS);
+    // Hidden items start as the panel shows them (lane AS): hidden
+    // files are not shown here, so the row starts off.
+    let hidden_row = |app: &App| {
+        labels(app)
+            .into_iter()
+            .find(|l| l.starts_with("Hidden items"))
+    };
+    assert_eq!(hidden_row(&app).as_deref(), Some("Hidden items: off"));
+    let said = enter(&mut app, &mut runtime, HIDDEN);
+    assert_eq!(said, ["Hidden items: on"]);
     let said = enter(&mut app, &mut runtime, HIDDEN);
     assert_eq!(said, ["Hidden items: off"]);
     let said = enter(&mut app, &mut runtime, HOUR);
@@ -207,6 +217,13 @@ fn the_criteria_turn_settings_and_escape_compares_nothing() {
     assert_eq!(said_of(&mut app, &mut runtime, effects), [NOTHING_COMPARED]);
     assert!(app.jobs.ids().is_empty());
     cells(NOTHING_COMPARED, NOTHING_COMPARED, 21);
+
+    // With hidden files shown in the panel, the row starts on.
+    run(&mut app, &mut runtime, ids::TOGGLE_HIDDEN);
+    run(&mut app, &mut runtime, ids::COMPARE_FOLDERS);
+    assert_eq!(hidden_row(&app).as_deref(), Some("Hidden items: on"));
+    let effects = app.dialog_escape();
+    said_of(&mut app, &mut runtime, effects);
 }
 
 fn said_of(app: &mut App, runtime: &mut Runtime, effects: Vec<Effect>) -> Vec<String> {
@@ -236,7 +253,7 @@ fn enter_on_a_different_row_compares_the_two_files() {
     compared(&mut app, &mut runtime);
     let row = row_starting(&app, "Different, notes.txt");
     let said = enter(&mut app, &mut runtime, &row);
-    assert_eq!(said[0], "Comparing notes.txt here with the one there");
+    assert_eq!(said[0], "Comparing notes.txt here with notes.txt there");
     assert!(
         matches!(
             app.opens.last().map(|o| &o.purpose),
@@ -280,6 +297,13 @@ fn the_plan_rows_start_with_their_action_and_a_row_can_change() {
     assert_eq!(said, [summary]);
     assert!(within_cells(summary, "Update the other panel: 2 to copy"));
     assert_eq!(top(&app), Some("SyncPlan"));
+    // The plan's title: the mode and the count first (lane AS).
+    let title = app
+        .dialogs
+        .last()
+        .map(|(_, d)| d.title())
+        .unwrap_or_default();
+    cells(&title, "Update the other panel: 2 changes", 33);
     let rows = labels(&app);
     let copy = "Copy there: plan.md, only here";
     cells(copy, copy, 30);
@@ -304,6 +328,17 @@ fn the_plan_rows_start_with_their_action_and_a_row_can_change() {
     let said = enter(&mut app, &mut runtime, &row);
     assert_eq!(said, ["plan.md: Take back in, 1 of 2"]);
     let said = enter(&mut app, &mut runtime, TOGGLE);
+    assert_eq!(said, [copy]);
+    // Space does the same from the plan itself, the new line said once
+    // (lane AS).
+    let space = |app: &mut App, runtime: &mut Runtime| {
+        let effects = app.handle(AppEvent::Key(Key::parse("space").unwrap()));
+        self::said(runtime.run_until_idle(app, effects))
+    };
+    let said = space(&mut app, &mut runtime);
+    assert_eq!(said, ["Left out: plan.md, would copy there"]);
+    assert_eq!(top(&app), Some("SyncPlan"));
+    let said = space(&mut app, &mut runtime);
     assert_eq!(said, [copy]);
 
     // The skipped row there can be copied toward this panel.
@@ -392,7 +427,7 @@ fn a_changed_option_blocks_the_run_until_compare_again() {
     assert_eq!(top(&app), Some("SyncPlan"));
     // Compare again closes the views and compares with the new options.
     let said = enter(&mut app, &mut runtime, AGAIN);
-    assert_eq!(said[0], "Comparing photos here with backup there");
+    assert_eq!(said[0], "Comparing photos here with backup there.");
     assert_eq!(top(&app), Some("SyncResult"));
     let rows = labels(&app);
     assert!(
@@ -402,12 +437,48 @@ fn a_changed_option_blocks_the_run_until_compare_again() {
     );
 }
 
+/// The folder watcher's change under a compared folder makes the result
+/// and the plan old; Synchronize now refuses until Compare again (lane
+/// AS).
+#[test]
+fn a_changed_folder_makes_the_result_old_until_compare_again() {
+    let fake = folders();
+    let (mut app, mut runtime) = started(&fake);
+    compared(&mut app, &mut runtime);
+    enter(&mut app, &mut runtime, SYNC);
+    enter(&mut app, &mut runtime, &mode_id(SyncMode::UpdateThere));
+    assert_eq!(top(&app), Some("SyncPlan"));
+    // A change somewhere else says nothing.
+    let effects = app.handle(AppEvent::Watched {
+        side: Side::Left,
+        place: local("/elsewhere"),
+        event: diroxide_vfs::WatchEvent::Changed(local("/elsewhere/x.txt")),
+    });
+    assert!(!said(runtime.run_until_idle(&mut app, effects)).contains(&STALE.to_owned()));
+    let effects = app.handle(AppEvent::Watched {
+        side: Side::Right,
+        place: local("/backup"),
+        event: diroxide_vfs::WatchEvent::Changed(local("/backup/old.txt")),
+    });
+    let heard = said(runtime.run_until_idle(&mut app, effects));
+    assert_eq!(heard.iter().filter(|s| *s == STALE).count(), 1, "{heard:?}");
+    cells(STALE, STALE, 30);
+    assert_eq!(labels(&app)[0], STALE);
+    let heard = enter(&mut app, &mut runtime, RUN);
+    assert_eq!(heard, [format!("{STALE}. Compare again first.")]);
+    assert_eq!(top(&app), Some("SyncPlan"));
+    // Compare again gives a fresh result.
+    enter(&mut app, &mut runtime, AGAIN);
+    assert_eq!(top(&app), Some("SyncResult"));
+    assert_ne!(labels(&app)[0], STALE);
+}
+
 #[test]
 fn synchronize_from_the_panel_compares_then_offers_the_modes() {
     let fake = folders();
     let (mut app, mut runtime) = started(&fake);
     let said = run(&mut app, &mut runtime, ids::SYNCHRONIZE);
-    assert_eq!(said[0], "Comparing photos here with backup there");
+    assert_eq!(said[0], "Comparing photos here with backup there.");
     assert_eq!(top(&app), Some("SyncModes"));
     // Compare only goes back to the result.
     enter(&mut app, &mut runtime, NO_MODE);

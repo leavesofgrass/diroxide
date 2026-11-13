@@ -979,6 +979,9 @@ enum Then {
     NoTrash(Message),
     /// A plugin's file job: the plugin hears its report (W4d).
     PluginJob(crate::plugins::CallId),
+    /// Duplicates sent to the trash: the report says the bytes freed
+    /// (lane AS).
+    Freed(u64),
 }
 
 /// Type-ahead: the text typed so far and when it was last typed.
@@ -1511,6 +1514,8 @@ impl App {
             let focus = self.restored_focus(side);
             effects.extend(self.open(side, place, focus));
         }
+        // `diro -`: its list of places opens over the panels.
+        effects.extend(self.start_place_list());
         effects
     }
 
@@ -1937,7 +1942,10 @@ impl App {
     /// [`Effect::AppRequests`], where [`Runtime::carry_out`](crate::Runtime::carry_out)
     /// takes them.
     pub fn handle(&mut self, event: AppEvent) -> Vec<Effect> {
+        let waiting = self.requests.len();
         let mut effects = self.handle_event(event);
+        // A file opened or edited from diroxide joins the recent files.
+        self.keep_recent(&effects, waiting);
         effects.extend(self.plugin_queue_next());
         effects.extend(self.jobs_queue_next());
         self.note_job_tabs();
@@ -1990,7 +1998,10 @@ impl App {
                 if self.panel(side).place() == &place {
                     self.quick_view_watch(side, &event);
                 }
-                self.watched(side, &place, &event)
+                // A compare result on this folder is old now (lane AS).
+                let mut effects = self.sync_folder_changed(&place);
+                effects.extend(self.watched(side, &place, &event));
+                effects
             }
             AppEvent::NotWatched { side, place } => self.not_watched(side, &place),
             AppEvent::Places(places) => self.places_arrived(places),

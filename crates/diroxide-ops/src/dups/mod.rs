@@ -71,6 +71,12 @@ pub struct DupOptions {
     /// Files smaller than this are counted and left out; 0 takes every
     /// size.
     pub min_size: u64,
+    /// Read hidden files and the files in hidden folders (below a root;
+    /// a root named itself is always read). Off, they are counted and
+    /// left out before anything is hashed, so the ask-first estimate does
+    /// not count them; the app passes the panel's setting (question
+    /// 136). On by default.
+    pub include_hidden: bool,
     /// Compare the bytes of files whose full hashes match, as the last
     /// step.
     pub byte_compare: bool,
@@ -101,6 +107,7 @@ impl Default for DupOptions {
             include_empty: false,
             include_hard_links: false,
             min_size: 0,
+            include_hidden: true,
             byte_compare: false,
             partial_block: Self::PARTIAL_BLOCK,
             ask_above: Some(Self::ASK_ABOVE),
@@ -435,6 +442,10 @@ pub struct DupResult {
     pub empty_left_out: u64,
     /// Files under [`DupOptions::min_size`] counted and left out.
     pub small_left_out: u64,
+    /// Hidden files, and the files in hidden folders, counted and left
+    /// out when [`DupOptions::include_hidden`] is off: never hashed and
+    /// never in the ask-first estimate.
+    pub hidden_left_out: u64,
     /// Extra names of hard-linked files left out.
     pub hard_links_left_out: u64,
     /// Files that could not be read, also in `left_out`.
@@ -503,6 +514,12 @@ impl DupResult {
             notes.push(format!(
                 "{} left out: too small",
                 grouped_count(self.small_left_out, "file", "files")
+            ));
+        }
+        if self.hidden_left_out > 0 {
+            notes.push(format!(
+                "{} left out",
+                grouped_count(self.hidden_left_out, "hidden file", "hidden files")
             ));
         }
         if self.reached_twice > 0 {

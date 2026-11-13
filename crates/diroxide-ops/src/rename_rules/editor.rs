@@ -62,7 +62,7 @@ pub enum EditorRefused {
     Empty(usize),
     /// A line's `(was ...)` names no file of the plan, or one already
     /// named on an earlier line (keyed form).
-    #[error("Names not read: line {0} has no known (was ...)")]
+    #[error("Names not read: line {0}, unknown (was)")]
     UnknownKey(usize),
     /// Some files of the plan have no line (keyed form): "2 files have
     /// no line".

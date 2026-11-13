@@ -6,10 +6,11 @@
 use std::fs;
 use std::path::Path;
 
-use diroxide_config::Paths;
+use diroxide_config::{Paths, RecentAction};
 use diroxide_core::{FixedClock, Key, Timestamp, UtcOffset};
 
 use super::*;
+use crate::app::flat::{KEEP_COPY_NOT_BUILT, KEEP_ONE_LEVEL, KEEP_OR_ONE};
 use crate::app::{AppEvent, AppOptions};
 use crate::runtime::Runtime;
 
@@ -105,6 +106,19 @@ fn close(app: &mut App, runtime: &mut Runtime) {
         let effects = app.dialog_escape();
         settle(app, runtime, effects);
     }
+}
+
+/// Presses a key and keeps only the recent-file asks it made; every
+/// other request and effect is dropped, so no editor or program starts.
+fn press_keeping(app: &mut App, text: &str) -> Vec<ListsAsk> {
+    let _ = app.handle(AppEvent::Key(Key::parse(text).unwrap()));
+    app.requests
+        .drain(..)
+        .filter_map(|request| match request {
+            Request::Lists(ask) => Some(*ask),
+            _ => None,
+        })
+        .collect()
 }
 
 fn cells(line: &str) -> usize {
@@ -322,10 +336,107 @@ fn the_flat_view_lists_every_file_below_and_turns_off() {
     labels.sort();
     assert_eq!(labels, ["a.txt", "one.txt", "two.txt"]);
 
+    // The refining filter matches the folder text after the name too:
+    // "*deep*" names no file here, only the folder two.txt is in.
+    let said = press(&mut app, &mut runtime, "ctrl+s");
+    assert_eq!(said, ["Refine results, empty"]);
+    let said = typed(&mut app, &mut runtime, "*deep*");
+    let line = "Refined: 1 of 3 shown";
+    assert_eq!(said, [line]);
+    assert_eq!(cells(line), 21);
+    let labels: Vec<String> = top_rows(&app).into_iter().map(|r| r.label).collect();
+    assert_eq!(labels, ["two.txt"]);
+    let said = press(&mut app, &mut runtime, "ctrl+s");
+    assert_eq!(said, ["Refine results: *deep*"]);
+    let said = typed(&mut app, &mut runtime, "one*");
+    assert_eq!(said, ["Refined: 1 of 3 shown"], "a name still matches");
+
     let said = run(&mut app, &mut runtime, ids::FLAT_VIEW);
     assert_eq!(said, ["Flat view off. work."]);
     assert_eq!(cells("Flat view off. work."), 20);
     assert!(app.dialogs.is_empty());
+}
+
+/// Move out of a flat view asks "Keep folders, or all in one folder?" on
+/// Keep folders; Keep folders makes b/deep in the other panel's folder
+/// and moves each file into its own folder (lane AS).
+#[test]
+fn moving_out_of_a_flat_view_keeps_the_folders_first() {
+    let fixture = fixture();
+    let out = fixture.root.parent().unwrap().join("out").unwrap();
+    fs::create_dir_all(out.to_string()).unwrap();
+    let mut options = AppOptions::new(fixture.root.clone(), out.clone());
+    options.settings.dialog_settle_ms = 0;
+    let mut app = App::new(options);
+    let paths = Paths::new(fixture.state.join("config"), fixture.state.clone());
+    let mut runtime = Runtime::with_local().with_paths(paths);
+    let start = app.start();
+    settle(&mut app, &mut runtime, start);
+
+    run(&mut app, &mut runtime, ids::FLAT_VIEW);
+    focus_row(&mut app, "start");
+    let effects = app.accept();
+    settle(&mut app, &mut runtime, effects);
+    // Mark every row, then two.txt, two levels down, is refused with
+    // Keep folders.
+    for _ in 0..3 {
+        press(&mut app, &mut runtime, "space");
+    }
+    press(&mut app, &mut runtime, "f6");
+    let effects = app.accept();
+    let said = settle(&mut app, &mut runtime, effects);
+    assert_eq!(said[0], KEEP_ONE_LEVEL);
+    assert_eq!(cells(KEEP_ONE_LEVEL), 40);
+    let effects = app.dialog_escape();
+    settle(&mut app, &mut runtime, effects);
+    // Two.txt unmarked: a.txt and b/one.txt are left.
+    let two = top_rows(&app)
+        .into_iter()
+        .find(|row| row.label == "two.txt")
+        .unwrap()
+        .id;
+    focus_row(&mut app, &two);
+    press(&mut app, &mut runtime, "space");
+
+    let said = press(&mut app, &mut runtime, "f6");
+    assert_eq!(cells(KEEP_OR_ONE), 35);
+    assert_eq!(
+        said,
+        [format!(
+            "{KEEP_OR_ONE}, Keep folders, as below the flat view, 1 of 2"
+        )]
+    );
+    for row in top_rows(&app) {
+        assert!(cells(&row.label) <= 40, "{}", row.label);
+    }
+    // Escape does nothing and says so.
+    let effects = app.dialog_escape();
+    let said = settle(&mut app, &mut runtime, effects);
+    assert_eq!(said, ["Nothing moved."]);
+    assert!(app.results_shown());
+
+    press(&mut app, &mut runtime, "f6");
+    let effects = app.accept();
+    let mut said = settle(&mut app, &mut runtime, effects);
+    // The plan is confirmed as any move's is.
+    if app.dialog_purpose().is_some() && !app.results_shown() {
+        let effects = app.handle(AppEvent::Key(Key::parse("y").unwrap()));
+        said.extend(settle(&mut app, &mut runtime, effects));
+    }
+    let landed = |path: &[&str]| {
+        let mut place = out.clone();
+        for name in path {
+            place = place.join(name).unwrap();
+        }
+        Path::new(&place.to_string()).exists()
+    };
+    assert!(landed(&["a.txt"]), "{said:?}");
+    assert!(landed(&["b", "one.txt"]), "b is made in out: {said:?}");
+    assert!(!exists(&fixture, "a.txt"));
+    let two = fixture.root.join("b").unwrap().join("deep").unwrap();
+    let two = two.join("two.txt").unwrap();
+    assert!(Path::new(&two.to_string()).exists(), "not marked");
+    assert_eq!(cells(KEEP_COPY_NOT_BUILT), 39);
 }
 
 #[test]
@@ -385,35 +496,44 @@ fn recent_files_are_kept_listed_newest_first_and_cleared() {
     // F4 on a file asks for it to be kept; the editor is not started
     // here, only the ask is made.
     focus(&mut app, "a.txt");
-    app.note_recent(&ids::EDIT);
-    focus(&mut app, "b");
-    app.note_recent(&ids::ENTER);
-    let asks: Vec<ListsAsk> = app
-        .requests
-        .drain(..)
-        .filter_map(|request| match request {
-            Request::Lists(ask) => Some(*ask),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(asks.len(), 1, "a folder is never kept: {asks:?}");
-    let effects = Vec::new();
+    let asks = press_keeping(&mut app, "f4");
+    assert_eq!(asks.len(), 1, "{asks:?}");
+    assert!(matches!(
+        &asks[0],
+        ListsAsk::Record {
+            action: RecentAction::Edited,
+            ..
+        }
+    ));
     for ask in asks {
         app.lists_ask(ask);
     }
-    settle(&mut app, &mut runtime, effects);
-    let now = app.now();
+    settle(&mut app, &mut runtime, Vec::new());
+
+    // Enter on a file in a list from diro - is kept too: the program is
+    // not started here.
     let one = fixture.root.join("b").unwrap().join("one.txt").unwrap();
-    app.lists_ask(ListsAsk::Record {
-        place: one,
-        action: RecentAction::Opened,
-        now,
-    });
+    let effects = app.open_place_list("Standard input", "1 path from standard input", vec![one]);
+    settle(&mut app, &mut runtime, effects);
+    let asks = press_keeping(&mut app, "enter");
+    assert_eq!(asks.len(), 1, "{asks:?}");
+    assert!(matches!(
+        &asks[0],
+        ListsAsk::Record {
+            action: RecentAction::Opened,
+            ..
+        }
+    ));
+    close(&mut app, &mut runtime);
+    for ask in asks {
+        app.lists_ask(ask);
+    }
     settle(&mut app, &mut runtime, Vec::new());
 
     let said = run(&mut app, &mut runtime, ids::RECENT_FILES);
     let start = "Recent: 2 files, newest one.txt, today";
-    assert_eq!(said, [start]);
+    // The list from diro - was there first, once this session.
+    assert_eq!(said, [start, "Replaces the search results."]);
     assert!(cells(start) <= 40);
     let rows = top_rows(&app);
     assert_eq!(rows[0].label, "one.txt");
@@ -427,6 +547,11 @@ fn recent_files_are_kept_listed_newest_first_and_cleared() {
     close(&mut app, &mut runtime);
     let said = run(&mut app, &mut runtime, ids::RECENT_FILES);
     assert_eq!(said, ["Recent: no files."]);
+    close(&mut app, &mut runtime);
+
+    // F3 views a file and is never kept (question 138).
+    focus(&mut app, "a.txt");
+    assert!(press_keeping(&mut app, "f3").is_empty(), "F3 is never kept");
 }
 
 #[test]
@@ -435,9 +560,8 @@ fn recent_files_off_keeps_nothing_and_says_so() {
     let (mut app, mut runtime) = started(&fixture);
     app.settings.recent_files = false;
     focus(&mut app, "a.txt");
-    app.note_recent(&ids::EDIT);
     assert!(
-        !app.requests.iter().any(|r| matches!(r, Request::Lists(_))),
+        press_keeping(&mut app, "f4").is_empty(),
         "nothing kept while the setting is off"
     );
     let said = run(&mut app, &mut runtime, ids::RECENT_FILES);
@@ -466,6 +590,31 @@ fn a_list_of_places_opens_in_the_lister_for_diro_dash() {
     assert_eq!(said, ["3 paths from standard input: nothing to list."]);
 }
 
+/// `diro -` asks for its list before the frontend starts the app; the
+/// start opens it over the panels (lane AS).
+#[test]
+fn a_list_asked_for_at_start_opens_after_the_panels() {
+    let fixture = fixture();
+    let mut options = AppOptions::new(fixture.root.clone(), fixture.root.clone());
+    options.settings.dialog_settle_ms = 0;
+    let mut app = App::new(options);
+    let paths = Paths::new(fixture.state.join("config"), fixture.state.clone());
+    let mut runtime = Runtime::with_local().with_paths(paths);
+    let places = vec![
+        fixture.root.join("a.txt").unwrap(),
+        fixture.root.join("b").unwrap(),
+        fixture.root.join("gone.txt").unwrap(),
+    ];
+    app.open_place_list_at_start("Standard input", "3 paths from standard input", places);
+    let start = app.start();
+    let said = settle(&mut app, &mut runtime, start);
+    let line = "3 paths from standard input, 1 missing";
+    assert!(said.iter().any(|s| s == line), "{said:?}");
+    assert_eq!(cells(line), 38);
+    assert!(app.results_shown());
+    assert_eq!(top_rows(&app).len(), 3);
+}
+
 #[test]
 fn save_as_collection_keeps_the_list_on_the_screen() {
     let fixture = fixture();
@@ -480,6 +629,12 @@ fn save_as_collection_keeps_the_list_on_the_screen() {
     assert_eq!(said, ["Collection name for 2 items, empty"]);
     let said = typed(&mut app, &mut runtime, "From a shell");
     assert_eq!(said, ["Added 2 to From a shell."]);
+    // The list stays on the screen after the name, so a second save
+    // keeps it again; with no list, the panel's focused entry.
+    assert!(app.results_shown());
+    let said = run(&mut app, &mut runtime, ids::SAVE_AS_COLLECTION);
+    assert_eq!(said, ["Collection name for 2 items, empty"]);
+    close(&mut app, &mut runtime);
     let said = run(&mut app, &mut runtime, ids::SAVE_AS_COLLECTION);
     close(&mut app, &mut runtime);
     assert_eq!(
@@ -488,6 +643,95 @@ fn save_as_collection_keeps_the_list_on_the_screen() {
         "the panel's focused entry"
     );
     assert_eq!(cells(NOTHING_TO_SAVE), 36);
+}
+
+/// Runs a command the way the owner does over an open list: the palette
+/// opens on top of the lister, its row is chosen and Enter runs it.
+fn through_palette(app: &mut App, runtime: &mut Runtime, id: &CommandId) -> Vec<String> {
+    let effects = app.handle(AppEvent::Command(Command::new(ids::PALETTE)));
+    settle(app, runtime, effects);
+    match app.dialogs.last_mut() {
+        Some((
+            _,
+            Dialog::Edit {
+                candidates: Some(list),
+                in_list,
+                ..
+            },
+        )) => {
+            assert!(list.focus_id(id.as_str()), "no palette row {id:?}");
+            *in_list = true;
+        }
+        _ => panic!("the palette did not open"),
+    }
+    let effects = app.accept();
+    settle(app, runtime, effects)
+}
+
+#[test]
+fn the_palette_saves_collects_and_removes_missing_over_an_open_list() {
+    let fixture = fixture();
+    let (mut app, mut runtime) = started(&fixture);
+    let places = vec![
+        fixture.root.join("a.txt").unwrap(),
+        fixture.root.join("b").unwrap(),
+    ];
+    let effects = app.open_place_list("Standard input", "2 paths from standard input", places);
+    settle(&mut app, &mut runtime, effects);
+
+    // Save as collection keeps the list's two rows, not the panel's entry.
+    let said = through_palette(&mut app, &mut runtime, &ids::SAVE_AS_COLLECTION);
+    let line = "Collection name for 2 items, empty";
+    assert_eq!(said, [line]);
+    assert_eq!(cells(line), 34);
+    let said = typed(&mut app, &mut runtime, "From a shell");
+    assert_eq!(said, ["Added 2 to From a shell."]);
+    assert!(app.results_shown(), "the list stays on the screen");
+
+    // Collect takes the focused row.
+    let said = through_palette(&mut app, &mut runtime, &ids::COLLECT);
+    let line = "Added 1 to Collected.";
+    assert_eq!(said, [line]);
+    assert_eq!(cells(line), 21);
+    assert!(app.results_shown());
+
+    // Remove missing items, over a collection with a gone item.
+    close(&mut app, &mut runtime);
+    let collections = diroxide_search::Collections::in_state_folder(&fixture.state);
+    let gone = fixture.root.join("gone.txt").unwrap();
+    collections
+        .add("Trip photos", [gone], app.clock.as_ref())
+        .unwrap();
+    run(&mut app, &mut runtime, ids::COLLECTIONS);
+    focus_row(&mut app, "Trip photos");
+    let effects = app.accept();
+    settle(&mut app, &mut runtime, effects);
+    let said = through_palette(&mut app, &mut runtime, &ids::COLLECTION_REMOVE_MISSING);
+    let line = "Removed 1 from Trip photos. The file was not touched.";
+    assert_eq!(said, [line]);
+    assert!(app.results_shown());
+    assert!(top_rows(&app).is_empty());
+}
+
+#[test]
+fn the_results_actions_list_offers_save_as_collection() {
+    let fixture = fixture();
+    let (mut app, mut runtime) = started(&fixture);
+    let places = vec![fixture.root.join("a.txt").unwrap()];
+    let effects = app.open_place_list("Standard input", "1 path from standard input", places);
+    settle(&mut app, &mut runtime, effects);
+    press(&mut app, &mut runtime, "shift+f10");
+    let labels: Vec<String> = top_rows(&app).into_iter().map(|r| r.label).collect();
+    assert!(
+        labels.iter().any(|l| l == "Save as collection"),
+        "{labels:?}"
+    );
+    assert!(labels.iter().any(|l| l == "Collect"), "{labels:?}");
+    assert!(!labels.iter().any(|l| l == "Remove missing items"));
+    focus_row(&mut app, ids::SAVE_AS_COLLECTION.as_str());
+    let effects = app.accept();
+    let said = settle(&mut app, &mut runtime, effects);
+    assert_eq!(said, ["Collection name for 1 item, empty"]);
 }
 
 #[test]

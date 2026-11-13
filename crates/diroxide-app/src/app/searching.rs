@@ -147,6 +147,9 @@ pub(super) struct SearchState {
     last: Option<(String, SearchQuery)>,
     /// "Replaces the search results." was said once this session.
     replaced_said: bool,
+    /// A list of places to open once the app starts (`diro -`): its
+    /// title, its start line and its places.
+    at_start: Option<(String, String, Vec<Place>)>,
 }
 
 /// A search command of this module.
@@ -165,6 +168,14 @@ const ROUTES: [(CommandId, Do); 5] = [
     (ids::SEARCH_PAUSE, Do::Pause),
     (ids::SEARCH_SHOW_IN_FOLDER, Do::ShowInFolder),
     (ids::SEARCH_REMOVE_ROW, Do::Remove),
+];
+
+/// The commands that act on the list on the screen when the palette or a
+/// menu runs them over the results lister (alpha 5, lane AS).
+const LIST_COMMANDS: [CommandId; 3] = [
+    ids::SAVE_AS_COLLECTION,
+    ids::COLLECT,
+    ids::COLLECTION_REMOVE_MISSING,
 ];
 
 fn route(id: &CommandId) -> Option<Do> {
@@ -792,6 +803,23 @@ impl App {
     }
 
     /// A walk for the results failed: it is said, and the list stays.
+    /// A list that streamed ended with its own line (alpha 5, lane AS):
+    /// "Flat view on, 3 files in 3 folders." The list stops running and
+    /// the line is said; an empty list says "Nothing found". A line for
+    /// a list that is no longer on the screen is dropped.
+    pub(super) fn finish_list(&mut self, id: u64, line: Message) -> Vec<Effect> {
+        let Some(search) = self.searching.current.as_mut().filter(|s| s.id == id) else {
+            return Vec::new();
+        };
+        search.running = false;
+        search.paused = false;
+        let empty = search.hits.is_empty();
+        if empty && let Some(list) = self.results_list_mut() {
+            list.set_empty_text("Nothing found");
+        }
+        vec![Effect::Redraw(Redraw::All), self.say(line)]
+    }
+
     pub(super) fn finish_results_failed(&mut self, id: u64, message: Message) -> Vec<Effect> {
         if let Some(search) = self.searching.current.as_mut().filter(|s| s.id == id) {
             search.running = false;
@@ -949,10 +977,26 @@ impl App {
         if search.removed.contains(&hit.id()) {
             return false;
         }
-        match &search.refine {
-            Some(filter) => filter.evaluator(clock).matches(&hit.entry, &HitLookup(hit)),
-            None => true,
+        let Some(filter) = &search.refine else {
+            return true;
+        };
+        let evaluator = filter.evaluator(clock);
+        if evaluator.matches(&hit.entry, &HitLookup(hit)) {
+            return true;
         }
+        // In a flat view the filter also matches the folder words said
+        // after the name, "work/b/deep" (alpha 5, lane AS): the folder
+        // text stands in for the name.
+        if search.kind == ListKind::Flat {
+            let words = hit.folder_words(search.root.as_ref());
+            let folder = words.strip_prefix("in ").unwrap_or(&words);
+            if !folder.is_empty() {
+                let mut entry = hit.entry.clone();
+                entry.name = folder.to_owned();
+                return evaluator.matches(&entry, &HitLookup(hit));
+            }
+        }
+        false
     }
 
     fn result_rows(&self, search: &Search) -> Vec<ListRow> {
@@ -1265,7 +1309,7 @@ impl App {
     /// The actions on the results, as a list (the context menu's key):
     /// each runs on the marked results, or the focused one.
     fn results_menu(&mut self) -> Vec<Effect> {
-        let actions: [(CommandId, &str); 12] = [
+        let mut actions: Vec<(CommandId, &str)> = vec![
             (ids::VIEW, "View at the match"),
             (ids::EDIT, "Edit at the line"),
             (ids::SEARCH_SHOW_IN_FOLDER, "Show in its folder"),
@@ -1275,10 +1319,17 @@ impl App {
             (ids::FILTER, "Refine results"),
             (ids::SEARCH_REMOVE_ROW, "Remove from results"),
             (ids::SEARCH_PAUSE, "Pause or resume search"),
+            (ids::SAVE_AS_COLLECTION, "Save as collection"),
+            (ids::COLLECT, "Collect"),
+        ];
+        if self.list_collection().is_some() {
+            actions.push((ids::COLLECTION_REMOVE_MISSING, "Remove missing items"));
+        }
+        actions.extend([
             (ids::FIND, "Search again"),
             (ids::SEARCH_SAVE, "Save this search"),
             (ids::EARLIER_DAY, "Earlier day"),
-        ];
+        ]);
         let rows = actions
             .iter()
             .map(|(id, name)| {
@@ -1315,6 +1366,11 @@ impl App {
             id if *id == ids::MOVE => self.result_job(JobKind::Move),
             id if *id == ids::TRASH => self.result_job(JobKind::Trash),
             id if *id == ids::FILTER => self.refine_prompt(),
+            // Save as collection, Collect and Remove missing items act on
+            // the list on the screen, which is on top here.
+            id if LIST_COMMANDS.contains(id) => self
+                .lists_dispatch(&Command::new(id.clone()))
+                .unwrap_or_default(),
             id => self.dispatch(&Command::new(id.clone())),
         }
     }
@@ -1534,12 +1590,28 @@ impl App {
                 if destination.kind() == diroxide_core::PlaceKind::Archive {
                     return vec![self.say(Message::error(super::archive::READ_ONLY))];
                 }
-                request = request.to(destination);
-                if kind == JobKind::Move {
+                let confirm = if kind == JobKind::Move {
                     self.settings.confirm.move_items
                 } else {
                     self.settings.confirm.copy
+                };
+                // Out of a flat view: keep the folders, or all in one
+                // folder? (lane AS)
+                if let Some(search) = self.searching.current.as_ref()
+                    && search.kind == ListKind::Flat
+                    && let Some(root) = search.root.clone()
+                {
+                    return self.flat_copy_question(super::flat::FlatCopy {
+                        side,
+                        kind,
+                        root,
+                        destination,
+                        sources: request.sources,
+                        confirm,
+                    });
                 }
+                request = request.to(destination);
+                confirm
             }
             JobKind::Trash => self.settings.confirm.trash,
             _ => true,
@@ -1800,10 +1872,6 @@ impl App {
 /// trash key does in it; the title and the start line are the opener's.
 /// One list at a time: opening one replaces the last.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 pub(crate) enum ListKind {
     /// A search's results: Find files, a saved search, the largest items.
     Search,
@@ -1825,13 +1893,13 @@ pub(crate) enum ListKind {
     DuplicateGroup,
 }
 
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 impl ListKind {
     /// What the list is, in words, for a sentence: "search results", "the
     /// collection Trip photos".
+    #[allow(
+        dead_code,
+        reason = "the pre-wiring step's (P5) words; no lane says them yet"
+    )]
     pub(crate) fn words(&self) -> String {
         match self {
             ListKind::Search => "search results".to_owned(),
@@ -1854,10 +1922,6 @@ impl ListKind {
 
 /// A list to open in the results lister ([`App::open_list`]).
 #[derive(Clone, Debug)]
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 pub(crate) struct ListOpen {
     /// What it is.
     pub kind: ListKind,
@@ -1884,10 +1948,6 @@ pub(crate) struct ListOpen {
 
 /// Said once a session when another list replaces a search's results: 28
 /// cells.
-#[allow(
-    dead_code,
-    reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-)]
 pub(crate) const REPLACES_RESULTS: &str = "Replaces the search results.";
 
 impl App {
@@ -1901,10 +1961,6 @@ impl App {
     /// the trash key (a collection's item leaves the collection; a label's
     /// item loses the label), Show in its folder, Remove from results and
     /// the refining filter.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn open_list(&mut self, open: ListOpen) -> (Vec<Effect>, u64) {
         let replaces = !self.searching.replaced_said
             && open.kind != ListKind::Search
@@ -1971,21 +2027,79 @@ impl App {
     }
 
     /// What the list on the screen is, when one is.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn list_kind(&self) -> Option<&ListKind> {
         self.searching.current.as_ref().map(|s| &s.kind)
     }
 
     /// The panel and tab the list belongs to.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn list_owner(&self) -> Option<(Side, u64)> {
         self.searching.current.as_ref()?.owner
+    }
+
+    /// Asks for a list of places to open in the results lister as soon
+    /// as [`App::start`] runs, after the panels: `diro -`'s way in, since
+    /// each frontend starts the app itself. `title` names the list,
+    /// `start` is said as it opens, its count first ("3 paths from
+    /// standard input"), as [`App::open_place_list`] takes them.
+    pub fn open_place_list_at_start(&mut self, title: &str, start: &str, places: Vec<Place>) {
+        self.searching.at_start = Some((title.to_owned(), start.to_owned(), places));
+    }
+
+    /// The list asked for at start, opened now (lane AS).
+    pub(super) fn start_place_list(&mut self) -> Vec<Effect> {
+        match self.searching.at_start.take() {
+            Some((title, start, places)) => self.open_place_list(&title, &start, places),
+            None => Vec::new(),
+        }
+    }
+
+    /// The places of the list on the screen (alpha 5, lane AS): its marked
+    /// rows, or every row it shows, each place once, in the list's order;
+    /// empty when the results lister is not on top. Save as collection
+    /// keeps these.
+    pub(crate) fn list_places(&self) -> Vec<Place> {
+        if !self.results_on_top() {
+            return Vec::new();
+        }
+        let Some((_, Dialog::Choose { list, .. })) = self.dialogs.last() else {
+            return Vec::new();
+        };
+        let marked: Vec<String> = list.selected_ids().into_iter().map(str::to_owned).collect();
+        let ids: Vec<String> = if marked.is_empty() {
+            list.rows().iter().map(|r| r.id.clone()).collect()
+        } else {
+            marked
+        };
+        let mut places: Vec<Place> = Vec::new();
+        for id in &ids {
+            if let Some(hit) = self.hit_of(id)
+                && !places.contains(&hit.place)
+            {
+                places.push(hit.place);
+            }
+        }
+        places
+    }
+
+    /// A command chosen in the palette or a menu over the results lister
+    /// that acts on the list (Save as collection, Collect, Remove missing
+    /// items): the dialogs above the lister close, the lister stays, and
+    /// the command runs on it through [`App::results_action`]. `None` for
+    /// any other command, or when no lister is open under the dialog.
+    pub(super) fn list_command_over(&mut self, id: &CommandId) -> Option<Vec<Effect>> {
+        if !LIST_COMMANDS.contains(id) {
+            return None;
+        }
+        let index = self
+            .opens
+            .iter()
+            .rposition(|o| matches!(o.purpose, Purpose::Results))?;
+        let mut effects = Vec::new();
+        while self.opens.len() > index + 1 && !self.dialogs.is_empty() {
+            effects.extend(self.close_top());
+        }
+        effects.extend(self.results_action(id));
+        Some(effects)
     }
 
     /// The collection whose items the list shows, when it is one.
@@ -2014,10 +2128,6 @@ impl App {
 
     /// Takes rows out of the list on the screen by their places, as Remove
     /// from results does, for a list whose store dropped them.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     pub(crate) fn list_remove_places(&mut self, places: &[Place]) -> Vec<Effect> {
         let Some(search) = self.searching.current.as_mut() else {
             return Vec::new();

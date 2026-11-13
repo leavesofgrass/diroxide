@@ -7,10 +7,9 @@
 //! so a search that would hash more than the setup allows stops with
 //! `DupError::Declined`, and the app asks and searches again.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use diroxide_core::{JobId, Place};
+use diroxide_core::JobId;
 use diroxide_meta::MetaError;
 use diroxide_meta::checksum::{Algorithm, compute_reader};
 use diroxide_ops::JobControl;
@@ -18,11 +17,11 @@ use diroxide_ops::SystemPacer;
 use diroxide_ops::dups::{
     ContentHasher, DupEnv, DupProgress, DupSink, find_duplicates, recheck_selection,
 };
-use diroxide_vfs::{CancelToken, OpContext, Registry, VfsError};
+use diroxide_vfs::{CancelToken, Registry, VfsError};
 
 use super::{Runtime, Shared, lock};
 use crate::app::AppEvent;
-use crate::dups_ui::{DupSetup, DupsAsk, DupsNote, leave_out};
+use crate::dups_ui::{DupsAsk, DupsNote};
 
 /// BLAKE3 over `diroxide-meta`'s checksum reader: the full hash of the
 /// duplicate search, the same the Checksum command computes and the same
@@ -106,14 +105,11 @@ fn run(shared: &Arc<Shared>, registry: &Registry, ask: DupsAsk, control: &JobCon
                 hasher: &hasher,
                 pacer: &pacer,
             };
+            // Hidden files follow the setup inside the engine (question
+            // 136): they are never hashed nor counted in the estimate.
             let found = find_duplicates(&setup.roots, &setup.options(), control, &env);
-            let mut hidden_left_out = 0;
-            let result = found.map(|mut result| {
-                if !setup.hidden {
-                    hidden_left_out = leave_out(&mut result, hidden_test(registry, &setup));
-                }
-                Box::new(result)
-            });
+            let hidden_left_out = found.as_ref().map_or(0, |r| r.hidden_left_out);
+            let result = found.map(Box::new);
             DupsNote::Found {
                 job,
                 setup,
@@ -136,45 +132,5 @@ fn run(shared: &Arc<Shared>, registry: &Registry, ask: DupsAsk, control: &JobCon
             let result = recheck_selection(&view.result, &selection, control, &env);
             DupsNote::Rechecked { job, view, result }
         }
-    }
-}
-
-/// Whether a copy is hidden, or sits in a hidden folder below the root
-/// it was found under, as its place's provider says; each folder is
-/// asked once.
-fn hidden_test<'a>(registry: &'a Registry, setup: &'a DupSetup) -> impl Fn(&Place) -> bool + 'a {
-    let known: Mutex<HashMap<String, bool>> = Mutex::new(HashMap::new());
-    let ctx = OpContext::new();
-    move |place: &Place| {
-        let Some(root) = setup
-            .roots
-            .iter()
-            .filter(|root| place == *root || place.is_within(root))
-            .max_by_key(|root| root.to_string().len())
-        else {
-            return false;
-        };
-        let mut at = Some(place.clone());
-        while let Some(here) = at {
-            if &here == root {
-                return false;
-            }
-            let key = here.to_string();
-            let cached = lock(&known).get(&key).copied();
-            let hidden = cached.unwrap_or_else(|| {
-                let hidden = registry
-                    .resolve(&here)
-                    .and_then(|provider| provider.stat(&here, &ctx))
-                    .map(|entry| entry.hidden)
-                    .unwrap_or(false);
-                lock(&known).insert(key, hidden);
-                hidden
-            });
-            if hidden {
-                return true;
-            }
-            at = here.parent();
-        }
-        false
     }
 }

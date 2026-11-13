@@ -144,8 +144,9 @@ impl Fixture {
     }
 
     fn key(&mut self, text: &str) -> Vec<String> {
+        // Through the key path, as the owner presses it (lane AS).
         let key = Key::parse(text).unwrap();
-        let effects = self.app.rename_key(&key).expect("a key of the preview");
+        let effects = self.app.handle(AppEvent::Key(key));
         self.settle(effects)
     }
 
@@ -309,11 +310,17 @@ fn yes_reads_the_folder_again_and_renames_in_one_job_with_one_undo() {
     f.run(ids::BATCH_RENAME);
     f.add_replace("IMG_", "trip-");
     let said = f.enter("apply");
-    let question = format!(
-        "Rename 3 files in {}? No is the default. y or n",
-        place(&f.folder)
-    );
+    // The folder's own name, "No is the default" inside 40 cells (lane
+    // AS).
+    let question = "Rename 3 files in photos? No is the default. y or n";
     assert_eq!(said, [question]);
+    assert_eq!(
+        "Rename 3 files in photos? No is the default."
+            .chars()
+            .count(),
+        44
+    );
+    assert_eq!("Rename 3 files in photos? No is".chars().count(), 31);
     let said = f.yes();
     assert!(
         said.contains(&"Checking the folder again.".to_owned()),
@@ -324,12 +331,9 @@ fn yes_reads_the_folder_again_and_renames_in_one_job_with_one_undo() {
         ["trip-0001.jpg", "trip-0002.jpg", "trip-0003.jpg"]
     );
     assert!(f.app.dialogs.is_empty(), "the batch's dialogs close");
-    // The engine's own report for now; "Renamed 3 files." waits on the
-    // contract request for the finish line in app/files.rs.
-    assert!(
-        said.contains(&"Rename finished: 3 done.".to_owned()),
-        "{said:?}"
-    );
+    // The batch's finish line (lane AS): "Renamed 50 files." is 17 cells.
+    assert!(said.contains(&"Renamed 3 files.".to_owned()), "{said:?}");
+    assert_eq!("Renamed 50 files.".chars().count(), 17);
     // One undo brings every name back.
     f.run(ids::UNDO);
     assert_eq!(f.names(), PHOTOS);
@@ -474,6 +478,13 @@ fn rules_change_move_and_go_and_the_counter_is_typed() {
     // A template with a placeholder chosen from the list.
     f.enter("add");
     f.enter("template");
+    // Metadata placeholders are not offered in this alpha (lane AS).
+    assert!(
+        !f.rows().iter().any(|row| row.contains("{meta:")),
+        "{:?}",
+        f.rows()
+    );
+    assert!(f.rows().iter().any(|row| row.starts_with("{stem}: ")));
     let said = f.enter("{counter}");
     assert_eq!(said[0], "Template: {counter}");
     f.answer("pic-{counter}");
@@ -502,6 +513,27 @@ fn rename_one_by_one_keeps_the_stepping_prompt() {
     let mut f = fixture(&PHOTOS, unchanged);
     let said = f.run(ids::RENAME_ONE_BY_ONE);
     assert!(said[0].starts_with("Rename IMG_0001.jpg to"), "{said:?}");
+}
+
+/// Question 132: F2 with several marked opens Batch rename; F2 on one
+/// entry keeps the name prompt (lane AS).
+#[test]
+fn f2_on_several_marked_opens_batch_rename_and_on_one_the_prompt() {
+    let mut f = fixture(&PHOTOS, unchanged);
+    let effects = f.app.handle(AppEvent::Key(Key::parse("f2").unwrap()));
+    let said = f.settle(effects);
+    assert_eq!(
+        said[0],
+        "Batch rename, 3 files, Reading the folder first, 1 of 10"
+    );
+    assert_eq!(f.title(), "Batch rename, 3 files");
+    let effects = f.app.dialog_escape();
+    f.settle(effects);
+    f.run(ids::SELECT_NONE);
+    let effects = f.app.handle(AppEvent::Key(Key::parse("f2").unwrap()));
+    let said = f.settle(effects);
+    assert!(said[0].starts_with("Rename "), "{said:?}");
+    assert!(said[0].contains(" to"), "{said:?}");
 }
 
 #[test]

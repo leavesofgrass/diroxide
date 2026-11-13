@@ -158,30 +158,14 @@ pub(super) enum Wants {
     Tabs(super::tabbing::TabWants),
     /// The dialogs of batch rename (alpha 5, lane RA; reserved by lane
     /// P5), hosted here for the same reason.
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Rename(super::renaming::RenameWants),
     /// The dialogs of compare folders and synchronize (alpha 5, lane SA;
     /// reserved by lane P5).
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Sync(super::syncing::SyncWants),
     /// The dialogs of duplicates (alpha 5, lane DA; reserved by lane P5).
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Dups(super::duplicates::DupsWants),
     /// The dialogs of the flat view, collections and recent files (alpha
     /// 5, lane LA; reserved by lane P5).
-    #[allow(
-        dead_code,
-        reason = "reserved for an alpha 5 app lane by the pre-wiring step (P5)"
-    )]
     Lists(super::collections::ListsWants),
 }
 
@@ -440,6 +424,10 @@ impl App {
             }
             // The review's one-key answers (lane AP).
             Wants::Photos(wants) => self.photo_key(&wants, key),
+            // Space changes a copy's mark in the duplicates list (lane AS).
+            Wants::Dups(wants) => self.dups_key(&wants, key),
+            // Space leaves a synchronize plan row out or takes it back.
+            Wants::Sync(wants) => self.sync_key(&wants, key),
             _ => None,
         }
     }

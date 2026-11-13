@@ -11,19 +11,77 @@
 //! while it lists stops it: "Stopped at 4,200 entries." Flat view again
 //! while the list is open turns it off: "Flat view off. work."
 
-use diroxide_core::{Command, ListModel, ListRow, Message, Place, Side};
+use diroxide_core::{Command, JobKind, JobRequest, ListModel, ListRow, Message, Place, Side};
 use diroxide_search::flat::root_name;
 use diroxide_search::{FlatOptions, FlatSummary, flat_off_words};
 
 use super::collections::ListsWants;
 use super::organize::Wants;
 use super::searching::{ListKind, ListOpen};
-use super::{App, Effect, Purpose};
+use super::{App, Effect, Flow, Purpose, Then};
 use crate::commands::ids;
 use crate::dialog::Dialog;
 use crate::entry::{CompletionSource, EntryField};
 use crate::lists::ListsAsk;
 use crate::request::Request;
+
+/// The question before copy or move out of a flat view: 35 cells.
+pub(super) const KEEP_OR_ONE: &str = "Keep folders, or all in one folder?";
+
+/// Said when copy is asked to keep folders: 39 cells.
+pub(super) const KEEP_COPY_NOT_BUILT: &str = "Keep folders is for Move only, for now.";
+
+/// Said when a kept folder would be two levels or more down: 40 cells.
+pub(super) const KEEP_ONE_LEVEL: &str = "Keep folders: one folder level, for now.";
+
+/// Its rows, the safer answer first.
+const KEEP: &str = "keep";
+const ONE: &str = "one";
+
+/// Copy or move out of a flat view, waiting on the question (lane AS).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FlatCopy {
+    /// The panel that asked.
+    pub side: Side,
+    /// Copy or move.
+    pub kind: JobKind,
+    /// The flat view's folder: the folders kept start below it.
+    pub root: Place,
+    /// The other panel's folder.
+    pub destination: Place,
+    /// The marked results, or the focused one.
+    pub sources: Vec<Place>,
+    /// Whether the plan is shown before it runs, as the settings say.
+    pub confirm: bool,
+}
+
+impl FlatCopy {
+    /// "Nothing copied." or "Nothing moved."
+    pub(super) fn nothing_done(&self) -> &'static str {
+        if self.kind == JobKind::Move {
+            "Nothing moved."
+        } else {
+            "Nothing copied."
+        }
+    }
+
+    /// Where a source goes when its folders are kept: the destination
+    /// with the folders between the root and the source; `None` when the
+    /// source is not below the root.
+    fn kept_folder(&self, source: &Place) -> Option<(Place, usize)> {
+        let mut names = Vec::new();
+        let mut folder = source.parent()?;
+        while folder != self.root {
+            names.push(folder.name()?.to_owned());
+            folder = folder.parent()?;
+        }
+        let mut kept = self.destination.clone();
+        for name in names.iter().rev() {
+            kept = kept.join(name).ok()?;
+        }
+        Some((kept, names.len()))
+    }
+}
 
 /// The form's rows, by id.
 const START: &str = "start";
@@ -225,13 +283,93 @@ impl App {
                     line.push(' ');
                     line.push_str(&sentence);
                 }
-                let mut effects = vec![Effect::Redraw(super::Redraw::All)];
                 // The lister's own end: the list stops running, and the
                 // flat view's words are said instead of a search's.
-                effects.extend(self.search_done(list, Err(Message::done(line))));
-                effects
+                self.finish_list(list, Message::done(line))
             }
             Err(message) => self.finish_results_failed(list, message),
         }
+    }
+
+    /// Copy or move out of a flat view asks first: "Keep folders, or all
+    /// in one folder?", on Keep folders. A name already taken is asked
+    /// about by the job, never overwritten in silence.
+    pub(super) fn flat_copy_question(&mut self, copy: FlatCopy) -> Vec<Effect> {
+        let rows = vec![
+            ListRow::new(KEEP, "Keep folders, as below the flat view"),
+            ListRow::new(ONE, "All in one folder; taken names asked"),
+        ];
+        let mut list = ListModel::new(KEEP_OR_ONE).with_rows(rows);
+        list.set_help(
+            "Enter chooses. A name already taken is asked about, never overwritten. Escape does nothing.",
+        );
+        self.open_organize(
+            Dialog::Choose {
+                list,
+                on_enter: Command::new(ids::ACCEPT),
+            },
+            Wants::Lists(ListsWants::FlatCopy(Box::new(copy))),
+        )
+    }
+
+    /// The answer: all in one folder plans the job as the results would;
+    /// keep folders moves each file into its own folder below the
+    /// destination, made when missing (the engine's planner for moves to
+    /// several folders). Copy that keeps folders has no planner yet and
+    /// says so.
+    pub(super) fn flat_copy_chosen(&mut self, copy: FlatCopy, row: &str) -> Vec<Effect> {
+        let mut effects = self.close_top();
+        let job = self.next_job_id();
+        let mut request =
+            JobRequest::new(job, copy.kind, copy.sources.clone()).to(copy.destination.clone());
+        let mut deepest = 0;
+        let kept: Vec<(Place, Place)> = if row == KEEP {
+            copy.sources
+                .iter()
+                .filter_map(|source| {
+                    let (folder, depth) = copy.kept_folder(source)?;
+                    deepest = deepest.max(depth);
+                    Some((source.clone(), folder))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        if row != KEEP || deepest == 0 {
+            effects.extend(self.plan_job(copy.side, request, None, Then::Report, copy.confirm));
+            return effects;
+        }
+        // The engine's planner makes one missing folder level and moves
+        // only; the rest waits on a planner in the ops crate.
+        let refusal = if copy.kind != JobKind::Move {
+            Some(KEEP_COPY_NOT_BUILT)
+        } else if deepest > 1 {
+            Some(KEEP_ONE_LEVEL)
+        } else {
+            None
+        };
+        if let Some(line) = refusal {
+            effects.push(self.say(Message::status(line)));
+            effects.extend(self.flat_copy_question(copy));
+            return effects;
+        }
+        if request.errors.is_ask() {
+            request.errors = self.settings.jobs.on_errors.policy();
+        }
+        self.flows.insert(
+            request.id,
+            Flow {
+                side: copy.side,
+                note: None,
+                then: Then::Report,
+                confirm: copy.confirm,
+                kind: JobKind::Move,
+            },
+        );
+        self.request(Request::PlanMoves {
+            request: Box::new(request),
+            moves: kept,
+        });
+        effects
     }
 }

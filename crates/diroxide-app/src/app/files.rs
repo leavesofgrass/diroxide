@@ -459,9 +459,10 @@ impl App {
         self.plan_job(side, request, note, Then::Report, true)
     }
 
-    /// Rename: the focused entry, or each marked entry in turn (R10); the
-    /// name prompt opens with the name in it and the cursor before the
-    /// extension. A command with a `name` renames the focused entry.
+    /// Rename: the focused entry (R10); the name prompt opens with the
+    /// name in it and the cursor before the extension. Several marked
+    /// entries open Batch rename (alpha 5, question 132). A command with
+    /// a `name` renames the focused entry.
     pub(super) fn rename(&mut self, command: &Command) -> Vec<Effect> {
         let side = self.active;
         let targets = self.panel(side).targets();
@@ -473,6 +474,11 @@ impl App {
         {
             let name = name.to_owned();
             return self.rename_answer(side, first.clone(), Vec::new(), Vec::new(), &name);
+        }
+        // Several marked and no name: Batch rename (question 132); Rename
+        // one by one is its own command.
+        if !rest.is_empty() && command.text("name").is_none() {
+            return self.batch_rename(command);
         }
         self.rename_prompt(side, first.clone(), rest.to_vec(), Vec::new())
     }
@@ -1162,6 +1168,16 @@ impl App {
                     diroxide_core::names::display_name(old),
                     diroxide_core::names::display_name(new)
                 )
+            }
+            // A batch: "Renamed 50 files." (17 cells), counted by the
+            // names changed, not by the steps a swap takes (lane AS).
+            Then::Renamed(pairs) if clean && pairs.len() > 1 && done > 0 => {
+                format!("Renamed {}.", count(pairs.len() as u64, "file", "files"))
+            }
+            // Duplicates trashed: "Freed 4.0 KB: moved 2 items to the
+            // trash. They can be restored." (lane AS).
+            Then::Freed(bytes) if clean && report.kind == JobKind::Trash && done > 0 => {
+                crate::dups_ui::freed_line(done, *bytes)
             }
             Then::Undid(kind) if clean => undo_words(kind.as_ref(), done),
             _ if cancel_line.is_some() => cancel_line.clone().unwrap_or_default(),

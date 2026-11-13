@@ -195,7 +195,8 @@ fn a_clean_dry_run_exits_zero_and_yes_renames_the_batch() {
     // Nobody to ask: the question, then why nothing happened.
     let (code, text) = run_in(&here, &NoAsker, &rule, b"");
     assert_eq!(code, 1, "{text}");
-    let question = format!("Rename 2 files in {}? y or n", folder.display());
+    // The folder's own name (lane AS).
+    let question = "Rename 2 files in photos? y or n";
     assert!(text.contains(&format!("{question}\n")), "{text}");
     assert!(text.ends_with(&format!(
         "Answered no: there is no terminal to ask.\n{ADD_YES}\n"

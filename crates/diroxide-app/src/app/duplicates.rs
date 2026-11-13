@@ -33,8 +33,8 @@
 
 use diroxide_core::format::count;
 use diroxide_core::{
-    Command, CommandId, ConflictPolicy, Effect, Importance, JobId, JobKind, ListModel, ListRow,
-    Message, MessageKind, Place, Redraw, Side,
+    Command, CommandId, ConflictPolicy, Effect, Importance, JobId, JobKind, Key, KeyCode,
+    ListModel, ListRow, Message, MessageKind, Place, Redraw, Side,
 };
 use diroxide_ops::dups::{DupError, DupEstimate, KeepRule, Rechecked};
 use diroxide_ops::{Plan, Step};
@@ -317,9 +317,11 @@ impl App {
             job,
             setup: Box::new(setup),
         })));
+        // Said with its period, so a live region does not run it into
+        // the count line (lane AS); the jobs line keeps none.
         vec![
             Effect::Redraw(Redraw::JobsLine),
-            self.say(Message::info(line)),
+            self.say(Message::info(format!("{line}."))),
         ]
     }
 
@@ -480,6 +482,21 @@ impl App {
         effects
     }
 
+    /// A key in a duplicates list (lane AS): Space on a copy changes its
+    /// mark as Enter does, and the copy's new words are said once; `None`
+    /// for any other key or list.
+    pub(super) fn dups_key(&mut self, wants: &DupsWants, key: &Key) -> Option<Vec<Effect>> {
+        let DupsWants::Members { view, group } = wants else {
+            return None;
+        };
+        if key.code != KeyCode::Char(' ') || !key.mods.is_empty() {
+            return None;
+        }
+        let row = self.top_row_id()?;
+        numbered(&row, 'm')?;
+        Some(self.member_chosen((**view).clone(), *group, &row))
+    }
+
     /// A group's copies in the results lister, each with its mark after
     /// its name; the copies list waits under it.
     fn show_group_list(&mut self, view: &DupView, group: usize) -> Vec<Effect> {
@@ -533,7 +550,7 @@ impl App {
         })));
         vec![
             Effect::Redraw(Redraw::JobsLine),
-            self.say(Message::info(line)),
+            self.say(Message::info(format!("{line}."))),
         ]
     }
 
@@ -587,12 +604,15 @@ impl App {
                 self.start_dups(*setup)
             }
             DupsWants::Trash { view, plan } => {
+                // The rechecked plan's bytes: a group refused at the
+                // recheck is not counted.
+                let bytes = plan.facts.bytes;
                 self.flows.insert(
                     plan.job,
                     Flow {
                         side: view.setup.side,
                         note: None,
-                        then: Then::Report,
+                        then: Then::Freed(bytes),
                         confirm: false,
                         kind: JobKind::Trash,
                     },
@@ -954,6 +974,13 @@ mod tests {
         assert!(kept[0].starts_with("Kept "), "{kept:?}");
         let again = key(&mut app, &mut runtime, "enter");
         assert!(again[0].starts_with("Marked "), "{again:?}");
+        // Space does as Enter, its new words said once (lane AS).
+        let spaced = key(&mut app, &mut runtime, "space");
+        assert_eq!(spaced.len(), 1, "{spaced:?}");
+        assert!(spaced[0].starts_with("Kept "), "{spaced:?}");
+        let spaced = key(&mut app, &mut runtime, "space");
+        assert!(spaced[0].starts_with("Marked "), "{spaced:?}");
+        assert_eq!(app.dialog_purpose(), Some("DupsMembers"));
         // The copies in the results lister, each with its mark.
         focus(&mut app, "Show these");
         let shown = key(&mut app, &mut runtime, "enter");
@@ -971,7 +998,7 @@ mod tests {
         // Trash the marked: checked again, then the question on No.
         focus(&mut app, "Trash the marked");
         let asked = key(&mut app, &mut runtime, "enter");
-        assert_eq!(asked[0], "Checking 1 copy again");
+        assert_eq!(asked[0], "Checking 1 copy again.");
         assert_eq!(app.dialog_purpose(), Some("DupsTrash"));
         let question = "Trash 1 copy, 11 bytes? No is the default. y or n";
         assert!(asked.iter().any(|s| s == question), "{asked:?}");
