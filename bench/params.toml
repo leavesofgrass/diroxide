@@ -41,6 +41,26 @@ search_name_other = 600
 search_content_windows = 3750
 search_content_other = 1500
 
+# The alpha 5 scenarios' budgets, by id (R34's commit 42), on Windows
+# only: twice the middle of three full release passes, rounded up, on
+# the owner's machine (AMD Ryzen 5 5600G, 6 cores, 12 threads, 64 GB,
+# Windows 11 Home build 26200, Samsung SSD 990 EVO 2TB). Those passes ran
+# on Friday, November 13, 2026, 1:18 to 1:49 AM Pacific time, beside
+# light other work (another project's containers; the processor 0 to 31
+# percent busy as each began; no cargo or rustc), not on a quiet machine:
+# tighten them after the quiet baseline (docs/dev/bench.md). panel-sort
+# is the release budget of the app test
+# a_folder_of_100_000_entries_sorts_and_searches_in_time (sort within
+# 200 ms), moved here from the debug test.
+[budgets_ms.windows]
+rename-preview = 200
+compare-trees = 1500
+flat-view = 1600
+duplicates = 6000
+tab-switch = 2200
+panel-sort = 200
+plugin-column = 10
+
 # The full run. The copy is the plan's 10 GB (plan section 4, principle
 # 8), from the alpha 3 baseline on; it was 1 GB before, and the ratchet
 # compares only baselines of the same sizes. It needs about 20 GB free
