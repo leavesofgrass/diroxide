@@ -76,9 +76,10 @@ The alpha 5 scenarios (R34's commit 41, in `xtask/src/bench/alpha5.rs`):
 - `flat-view`: the flat view of the compare's left tree, 100,000 files below 100 folders, with a panel's options, through the search engine, then made into the lister's rows.
 - `duplicates`: Find duplicates over 10,000 files in ten folders (about 230 MB), through the app itself with its BLAKE3, timed from Enter on "Find now" until the groups open: 1,000 groups of two, one group in fifty of 256 KiB files past the quick check. The second line gives the count line the app said first.
 - `tab-switch`: the left panel's first tab on the listing's folder of 100,000 entries and its second on an empty folder; Previous tab, timed until the app is idle, which lists the shown tab's folder again. The second line gives how soon the switch itself came back.
+- `panel-sort`: the app on the listing's folder of 100,000 entries, then Sort by size and Sort by name from the View menu in turn, each timed from the command to its answer; the median says one sort. The second line gives the panel's type-ahead lookup of a name near the end. These are the release budgets of the app's test `a_folder_of_100_000_entries_sorts_and_searches_in_time` (a sort within 200 ms, a type-ahead key within 30 ms), which holds a debug build to looser bounds.
 - `plugin-column`: the Lua gate's number (R34's commit 44, question 128): one `column/format` request of 1,000 rows to a running process plugin, from the ask to the answer. The plugin is the tree's own `diroxide-fake-plugin` in its `echo` mode, a correct process plugin built from the tree by the bench (`cargo build -p diroxide-plugins --features fake-plugin`), which answers every place but the last. The second line gives the cold start (the process, the handshake and the first request) and the app's own way, through the host's column call in batches of at most 500 (`MAX_COLUMN_BATCH`).
 
-The duplicates and the tab switch go through the app, since the duplicate search's hash is the metadata crate's BLAKE3, which xtask reaches only through the app, and tabs live there. The others call their engines directly: the rename plan and the compare in the ops crate, the flat view in the search crate.
+The duplicates, the tab switch and the panel sort go through the app, since the duplicate search's hash is the metadata crate's BLAKE3, which xtask reaches only through the app, and tabs and the panel's types live there. So the duplicates' number holds a little of the app's own work besides the search: the Enter that starts it, the job line, and the groups list made and said. The others call their engines directly: the rename plan and the compare in the ops crate, the flat view in the search crate.
 
 The search scenarios call the search engine directly, since xtask may depend on the search crate (W3s's request 2); each checks that it found exactly the tree's hits. The four alpha 4 scenarios go through the app and the job engine, which xtask may depend on, and so measure the program's own code.
 
@@ -116,6 +117,84 @@ cargo run --release -p xtask -- bench --save-baseline --gui --cold-build
 ```
 
 A baseline is saved only from an optimized, full run of every scenario, on a quiet machine: nothing else building, no check running, one bench at a time. A run saved without `--gui` keeps the GUI's budgets of the baseline it replaces, and says so, so the scenarios can be saved again without opening a window.
+
+A run that is not a baseline can be kept by name with `--save-as NAME`: it is added to `bench/NAME.json`, a list of runs that is never compared with. The name is small letters, digits and hyphens, and never `baseline`:
+
+```bash
+cargo run --release -p xtask -- bench --save-as alpha5-provisional
+```
+
+## Still to do: the alpha 5 baseline
+
+Alpha 5's quiet baseline is not saved yet; alpha 4's stays the comparison. On a quiet machine (no cargo or rustc running, no container busy, the processor under 10 percent before the start), run once:
+
+```bash
+cargo run --release -p xtask -- bench --save-baseline
+```
+
+Then tighten the alpha 5 budgets below from its medians, and record it here as "The alpha 5 baseline", with the machine and the load before the start.
+
+## The alpha 5 provisional runs
+
+No quiet hour came on the night of the alpha 5 bench: another project of the owner's was building and testing on the machine, and its containers ran in Docker. So the alpha 5 scenarios were measured beside it and kept by name, not as a baseline, in `bench/alpha5-provisional.json`.
+
+- When: Friday, November 13, 2026, three full release passes in a row, 1:18 to 1:49 AM Pacific time.
+- The load before each pass, read three times: 20, 0 and 0 percent; 31, 15 and 28 percent; 23, 26 and 14 percent. No cargo or rustc ran; one or two of the other project's containers did.
+- The machine: the owner's Windows machine, an AMD Ryzen 5 5600G with Radeon Graphics, 6 cores and 12 threads, 64 GB of memory, Windows 11 Home build 26200, the trees on a Samsung SSD 990 EVO 2TB on NVMe.
+- The versions: diroxide 0.1.0-alpha.4, alpha 5's work before its version bump, at commit d8f5373 with changes, built with rustc 1.96.1 in the release profile.
+
+Three earlier passes that night, from 12:37 to 1:16 AM, beside the other project's full build (the processor up to 100 percent), stopped at the duplicates scenario on its own check of the app's words, and kept nothing.
+
+Each pass gives a median of three runs; below are the least, the middle and the greatest of the three passes' medians, the middle being the number.
+
+The alpha 5 scenarios, with the budgets set from them (twice the middle, rounded up, on Windows only; `[budgets_ms.windows]` in `bench/params.toml`). They were set beside light other work, and are to be tightened after the quiet baseline:
+
+- Preview renaming 10,000 files: 94, 96 and 99 ms; budget 200 ms. The plan alone took 80 to 85 ms, and the app makes it again after every change. The count line: "10 problems. 9,990 of 10,000 files will change."
+- Compare two trees of 100,000 files: 717, 743 and 845 ms; budget 1,500 ms. The plan to update there took 66 to 74 ms more. The count line: "2,500 differences in 100,600 items: 1,000 different, 1,000 only here, 500 only there. 98,100 same."
+- Flat view of 100,000 files: 715, 779 and 843 ms; budget 1,600 ms.
+- Find duplicates among 10,000 files: 2.72, 2.89 and 3.25 s; budget 6,000 ms. The count line: "1000 groups, 2,000 files, 23.3 MB to free." The group count has no thousands separator, where the file count has one.
+- Switch to a tab of 100,000 entries: 1.05, 1.05 and 1.16 s; budget 2,200 ms. The switch itself comes back in under 0.1 ms; the rest is listing the folder again.
+- Sort a panel of 100,000 entries: 174, 175 and 201 ms; budget 200 ms, the app test's release budget, which the middle holds and the greatest pass missed by under a millisecond. The type-ahead lookup took 6.7 to 6.8 ms, within its 30 ms.
+- One column request for 1,000 rows: 3.2, 3.9 and 4.3 ms; budget 10 ms. See "The Lua gate's number" below.
+
+The earlier scenarios in the same passes, against the alpha 4 baseline:
+
+- List 100,000 entries: 81, 110 and 130 ms (alpha 4: 134 ms).
+- Stat 100,000 entries: 5.48, 6.10 and 7.51 s (alpha 4: 6.66 s).
+- List, then stat each of 100,000: 5.68, 5.68 and 6.08 s (alpha 4: 6.81 s).
+- Copy 10 GB through the engine: 10.1, 12.6 and 29.3 s; with the system call 12.9, 32.1 and 60.8 s. The copies' spread is the disk's write cache, as "The band" says.
+- Copy 40 files from a slow place: 1.38, 1.39 and 1.40 s, the stall said in every run.
+- List 100,000 entries in a zip: 225, 242 and 244 ms; in a tar: 227, 227 and 252 ms; in a 7z: 181, 181 and 209 ms.
+- Unpack a zip of 200 MB: 259, 306 and 395 ms.
+- View the first screen of a 256 MB log: 8.7, 9.2 and 9.5 ms.
+- Search 100,000 files by name: 65, 284 and 342 ms (alpha 4: 72 ms). This one is disturbed: the search walks on every core, so the other work shows in it most. Two reruns alone at 2:01 AM, the processor 29 to 83 percent busy beside three containers, gave 162 and 171 ms. The quiet baseline will say.
+- Search 995 MB of files by contents: 1.17, 1.21 and 1.47 s (alpha 4: 1.27 s).
+- Read the details of 1,000 files: 342, 358 and 363 ms.
+- The SHA-256 of a file of 1 GB: 617, 667 and 730 ms.
+- Plan converting 100 files, a dry run: 9.0, 9.5 and 10.0 ms.
+- List 100,000 entries with three columns: 1.45, 1.48 and 1.65 s.
+
+Listing and stat run the PF lane's code here. Listing's least, 81 ms, is under October 16's 97 ms; stat's least, 5.48 s, is still above its 4.4 s. The middle numbers are not a quiet machine's; the quiet baseline will say.
+
+## The Lua gate's number
+
+Question 128 asks whether alpha 5 needs a Lua tier, plugins inside the program, for speed. The bench times what a process plugin costs where it matters most, a custom column: one `column/format` request for 1,000 rows to a running process plugin, from the ask to the answer, with the tree's own `diroxide-fake-plugin` in its `echo` mode as the plugin.
+
+- One request of 1,000 rows: 3.2, 3.9 and 4.3 ms, the middle of three passes, each the median of three runs.
+- The app's own way, through the host's column call, which takes at most 500 places a batch (`MAX_COLUMN_BATCH`): two batches, 4.5 to 6.1 ms.
+- The cold start, the process started, the handshake and the first request: 76 to 86 ms, once per plugin.
+
+Measured beside light other work, as above. At about 4 microseconds a row, a column of 1,000 rows costs a process plugin under 5 ms, well under one frame and far under the half second the owner hears as a pause. The process boundary is not what a column waits on: the plugin's own work is. So these numbers give no speed case for a Lua tier in alpha 5, which keeps the default answer of question 128 (out of this alpha). A plugin whose own work is slow is slow in any tier.
+
+## The load flakes of alpha 5
+
+Five tests failed once or passed only on their retry under the wave's load. Each was run alone, natively, three times, on Friday, November 13, 2026, 10:08 to 10:22 PM Pacific time, beside one or two of the other project's containers and no cargo or rustc; the processor's load was read three times before each run.
+
+- The app's `panel::tests::a_folder_of_100_000_entries_sorts_and_searches_in_time`, in debug: the sort 370, 369 and 343 ms, the type-ahead 9.4, 9.6 and 9.3 ms, the rows 3.8, 4.1 and 3.5 s (load 14 to 69 percent). In the container beside other work it printed a sort of 2.015 s against its bound of 2 seconds. The bound was too tight for a debug build on a busy machine: the debug sort bound is now 5 seconds, about 14 times the native time, so a sort gone wrong by an order of magnitude still fails; the type-ahead keeps 300 ms. The release budgets moved to `panel-sort` above.
+- The metadata crate's `pipeline::tests::a_hostile_reader_fails_one_file_and_never_the_program`: 0.124, 0.122 and 0.122 s (load 2 to 31 percent). Its limit is right since ed6e949: the hanging case keeps its 100 ms deadline, which is what it tests, and the panicking and over-reading cases have 60 seconds, which no load reaches.
+- The app's `labels::the_labels_list_counts_missing_items_and_lists_a_labels_items`: 0.201, 0.234 and 0.200 s (load 10 to 70 percent). Its failure was an order, not a time: the folder watcher's line could land after the verdict. Since 6735a14 it looks for the verdict among what was said, so there is no limit to change.
+- The sftp plugin's `reconnect::a_lost_link_says_who_closed_it_when_ssh_tells`: 2.31, 2.01 and 2.07 s (load 7 to 54 percent). It has two cases, each waiting up to 10 seconds for the lost link, and each takes about a second alone, the fake ssh's 0.6 seconds of serving among it: ten times room. It passed on its retry once under the wave's heaviest load; the limit is right, and a second failure would point at the plugin's wait, not the bound.
+- The window's `jobs::an_interrupted_job_is_listed_first_with_retry_and_forget`, with the `gui` feature: 0.152, 0.139 and 0.147 s (load 11 to 69 percent). Its alpha 4 trouble was a hang, not a slow run, and nextest's ten-minute backstop still covers it; alone it is quick and has no time limit of its own to change.
 
 ## The alpha 4 baseline
 
