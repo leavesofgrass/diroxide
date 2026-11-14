@@ -127,7 +127,7 @@ version = "0.1.0"
 description = "Stops disc images from being copied, and logs every copy."
 license = "Apache-2.0 OR MIT"
 protocol = 1
-min_host = "0.1.0-alpha.4"
+min_host = "0.1.0-alpha.5"
 
 [run]
 command = ["python3", "main.py"]

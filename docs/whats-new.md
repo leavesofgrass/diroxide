@@ -2,9 +2,9 @@
 
 This page says in plain words what each alpha added. [The changelog](../CHANGELOG.md) has the full list, by area, and [known limits](known-limits.md) says what is still missing.
 
-## Alpha 5 (not released yet)
+## Alpha 5
 
-This section is for alpha 5, which has not been released. It lists what can be reached now: tabs, batch rename, comparing and synchronizing folders, duplicates, the flat view, collections and recent files, four new command line commands, and the follow-ups to alpha 4. Nothing here has been heard on a screen reader or read on a Braille display.
+What alpha 5 added, released on Saturday, November 14, 2026: tabs, batch rename, comparing and synchronizing folders, duplicates, the flat view, collections and recent files, four new command line commands, and the follow-ups to alpha 4. Nothing here has been heard on a screen reader or read on a Braille display.
 
 ### Batch rename
 

@@ -2,9 +2,9 @@
 
 Notable changes to diroxide, newest first. Agents write under a scratch heading with their id; the orchestrator regroups the entries by area before each alpha. Versions follow the alpha series in the plan; nothing is released until the owner says so.
 
-## Unreleased: alpha 5
+## 0.1.0-alpha.5
 
-Alpha 5 is the planned alpha.8, in the making: tabs, batch rename, compare and synchronize for folders, duplicates, lists that are not folders, four new commands for the shell, and the follow-ups to alpha 4. Nothing is released until the owner says so.
+Alpha 5 is the planned alpha.8, released on Saturday, November 14, 2026: tabs, batch rename, compare and synchronize for folders, duplicates, lists that are not folders, four new commands for the shell, and the follow-ups to alpha 4.
 
 ### Batch rename
 

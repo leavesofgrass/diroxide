@@ -166,7 +166,7 @@ Each item below was planned for alpha 4, is known, and was left for a later alph
 
 ## Tabs
 
-This section is for alpha 5, which has not been released. [Tabs](tabs.md) is the guide.
+This section is for alpha 5. [Tabs](tabs.md) is the guide.
 
 - No tab bar is drawn, in the window or in the terminal. A tab is said in words ("Documents, tab 2 of 3") and the tab list shows them all. Nothing about tabs is said while a panel has one tab.
 - A locked tab that is alone in its panel shows no lock in the title line, since nothing about tabs is said with one tab. Lock tab says the state when you press it.
@@ -179,7 +179,7 @@ This section is for alpha 5, which has not been released. [Tabs](tabs.md) is the
 
 ## Compare folders and synchronize
 
-This section is for alpha 5, which has not been released. [Compare files](compare.md#compare-two-folders) and [Synchronize](synchronize.md) are the guides.
+This section is for alpha 5. [Compare files](compare.md#compare-two-folders) and [Synchronize](synchronize.md) are the guides.
 
 - The compare and the run start at once. They do not wait in the transfer queue behind other jobs. Compare progress is spoken but does not update the Jobs list's line.
 - "By contents" is covered by the engine's tests and has not been tried by hand on a large tree.
@@ -191,7 +191,7 @@ This section is for alpha 5, which has not been released. [Compare files](compar
 
 ## Duplicates
 
-This section is for alpha 5, which has not been released. [Duplicates](duplicates.md) is the guide.
+This section is for alpha 5. [Duplicates](duplicates.md) is the guide.
 
 - Duplicates go to the trash only. Nothing is deleted for good, and a group always keeps one copy.
 - No search inside archives, and no cache of hashes: a second search reads the files again.
@@ -204,7 +204,7 @@ This section is for alpha 5, which has not been released. [Duplicates](duplicate
 
 ## Batch rename
 
-This section is for alpha 5, which has not been released. [Batch rename](rename.md) is the guide.
+This section is for alpha 5. [Batch rename](rename.md) is the guide.
 
 - Details placeholders, such as `{meta:exif.date}`, were cut from this alpha. They are not in the template's list of placeholders, and the app feeds them no values, so a template typed by hand with one makes each row a problem: "Problem, no value for {meta:exif.date}". Dates and sizes from the file itself work.
 - The rules that need a Unicode table are not built: turning accented letters into plain ones, and changing a Unicode form.
@@ -217,7 +217,7 @@ This section is for alpha 5, which has not been released. [Batch rename](rename.
 
 ## Lists that are not folders
 
-This section is for alpha 5, which has not been released. [Flat view, collections and recent files](collections.md) is the guide.
+This section is for alpha 5. [Flat view, collections and recent files](collections.md) is the guide.
 
 - Keep folders, in the question for Copy and Move out of a flat view, works for a Move one folder level down. Copy says "Keep folders is for Move only, for now." and deeper folders say "Keep folders: one folder level, for now." Both need an engine planner that copies into several folders and makes missing parent folders more than one level deep. A Keep-folders move goes through the job's own question as well.
 - A flat view's rows read "a.txt, in work/b/deep", the way the lister gives them, and its settings are not remembered from one time to the next.

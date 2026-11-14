@@ -1597,7 +1597,7 @@ dependencies = [
 
 [[package]]
 name = "diro"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-cli",
  "ureq",
@@ -1605,7 +1605,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-app"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-archive",
  "diroxide-components",
@@ -1635,7 +1635,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-archive"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "bzip2",
  "crc32fast",
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-cli"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1687,7 +1687,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-components"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-archive",
  "diroxide-core",
@@ -1704,7 +1704,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-config"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-core",
  "diroxide-theme",
@@ -1718,7 +1718,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-core"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "insta",
  "proptest",
@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-diff"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-core",
  "diroxide-preview",
@@ -1745,7 +1745,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-filetype"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
@@ -1755,7 +1755,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-gui"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -1780,7 +1780,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-meta"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "blake3",
  "crc32fast",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-ops"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "carta",
  "crc32fast",
@@ -1817,7 +1817,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-plugins"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-archive",
  "diroxide-config",
@@ -1837,7 +1837,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-preview"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "calamine",
  "carta",
@@ -1867,7 +1867,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-search"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-core",
  "diroxide-vfs",
@@ -1884,7 +1884,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-theme"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "insta",
  "proptest",
@@ -1896,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-tools"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-config",
  "diroxide-core",
@@ -1908,7 +1908,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-tui"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "crossterm",
  "ctrlc",
@@ -1922,7 +1922,7 @@ dependencies = [
 
 [[package]]
 name = "diroxide-vfs"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "diroxide-core",
  "dirs",
@@ -8010,7 +8010,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 dependencies = [
  "anyhow",
  "diroxide-app",
