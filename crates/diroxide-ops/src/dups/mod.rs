@@ -378,7 +378,8 @@ impl DupGroup {
     /// The group's row, the number first: "Group 3 of 41, 3 copies, 2.1 MB
     /// each, 4.2 MB to free", or "Group 1 of 3, 5 copies, empty files".
     pub fn row(&self, number: usize, of: usize) -> String {
-        let copies = count(self.distinct() as u64, "copy", "copies");
+        let copies = grouped_count(self.distinct() as u64, "copy", "copies");
+        let (number, of) = (grouped(number as u64), grouped(of as u64));
         if self.size == 0 {
             return format!("Group {number} of {of}, {copies}, empty files");
         }
@@ -482,7 +483,7 @@ impl DupResult {
         }
         format!(
             "{}, {}, {} to free",
-            count(self.groups.len() as u64, "group", "groups"),
+            grouped_count(self.groups.len() as u64, "group", "groups"),
             grouped_count(self.files() as u64, "file", "files"),
             human_size(self.waste())
         )

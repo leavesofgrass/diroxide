@@ -776,3 +776,23 @@ fn hidden_files_and_hidden_folders_contents_are_left_out() {
     );
     assert_eq!(line.chars().count(), 23);
 }
+
+#[test]
+fn a_thousand_groups_say_their_counts_with_the_separator() {
+    let fake = FakeProvider::new();
+    fake.add_file(&p("/t/a"), b"ab");
+    fake.add_file(&p("/t/b"), b"ab");
+    let mut result = run(&fake, &["/t"], &DupOptions::default());
+    assert_eq!(result.groups.len(), 1);
+    result.groups = vec![result.groups[0].clone(); 1000];
+    let line = result.count_line();
+    assert!(line.starts_with("1,000 groups, 2,000 files, "), "{line}");
+    // 41 cells at this size: both counts are said first, inside the first 26.
+    assert!(line.find(" files, ").is_some_and(|at| at < 26), "{line}");
+    let rows = result.group_rows();
+    assert!(
+        rows[999].starts_with("Group 1,000 of 1,000, 2 copies, "),
+        "{}",
+        rows[999]
+    );
+}
