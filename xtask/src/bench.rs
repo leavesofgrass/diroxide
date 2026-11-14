@@ -24,6 +24,12 @@
 //! - `search-name` and `search-content`: search the 1 GB tree of
 //!   `bench/search-tree.toml` (its small form with `--quick`) by name and
 //!   by contents through the search engine (alpha.3, W3s).
+//! - `details`, `checksum`, `convert-plan`, `columns`: alpha 4's (R30's
+//!   commit 117).
+//! - `rename-preview`, `compare-trees`, `flat-view`, `duplicates`,
+//!   `tab-switch`: alpha 5's engines (R34's commit 41, `bench/alpha5.rs`).
+//! - `plugin-column`: one batched `column/format` request to a process
+//!   plugin, the Lua gate's number (R34's commit 44).
 //!
 //! The archive scenarios call the archive provider and its runners
 //! directly (P2b, W2g's request 1): the archives are packed by diroxide's
@@ -73,6 +79,8 @@ use diroxide_search::{FnSink, Scope, SearchControl, SearchHit, SearchQuery, quot
 use diroxide_vfs::{OpContext, Provider, Registry};
 use serde::{Deserialize, Serialize};
 
+mod alpha5;
+
 use crate::budgets::{self, Budget};
 use crate::machine::{self, Machine, Versions};
 use crate::sample;
@@ -111,6 +119,17 @@ pub struct Sizes {
     pub convert_files: usize,
     /// Entries listed with three content columns.
     pub column_entries: usize,
+    /// Files in the batch rename's preview (alpha 5, R34's commit 41).
+    pub rename_files: usize,
+    /// Files in each of the two compared trees, and in the flat view.
+    pub compare_files: usize,
+    /// Folders those files are spread over.
+    pub compare_folders: usize,
+    /// Files searched for duplicates.
+    pub dup_files: usize,
+    /// Rows in the one `column/format` request to a process plugin (R34's
+    /// commit 44).
+    pub plugin_rows: usize,
 }
 
 /// The starting budgets, in milliseconds.
@@ -133,6 +152,25 @@ pub struct Budgets {
     pub search_content_windows: u64,
     /// A content search of the search tree, elsewhere.
     pub search_content_other: u64,
+    /// Budgets of later scenarios on Windows, by their id (alpha 5, R34's
+    /// commit 42): `[budgets_ms.windows]`.
+    #[serde(default)]
+    pub windows: BTreeMap<String, u64>,
+    /// The same elsewhere: `[budgets_ms.other]`.
+    #[serde(default)]
+    pub other: BTreeMap<String, u64>,
+}
+
+impl Budgets {
+    /// A later scenario's budget on this platform, when one is written.
+    pub fn budget_for(&self, id: &str) -> Option<u64> {
+        let table = if cfg!(windows) {
+            &self.windows
+        } else {
+            &self.other
+        };
+        table.get(id).copied()
+    }
 }
 
 /// `bench/params.toml`.
@@ -254,10 +292,35 @@ pub struct Options {
     pub gui: bool,
     /// Add the cold release build to the GUI's budgets.
     pub cold_build: bool,
+    /// Add the run to `bench/NAME.json`, a named list of runs that is not
+    /// the baseline (alpha 5: runs measured beside other work).
+    pub save_as: Option<String>,
+}
+
+/// A named list of runs, `bench/NAME.json`: kept beside the baseline,
+/// never compared with.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+pub struct SavedRuns {
+    /// What the file is.
+    pub about: String,
+    /// The runs, oldest first.
+    pub runs: Vec<Run>,
+}
+
+/// Whether a name for `--save-as` is plain: small letters, digits and
+/// hyphens, not starting with a hyphen, and not the baseline's own.
+pub fn plain_run_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && !name.starts_with('-')
+        && name != "baseline"
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// The scenario ids, in the order they run.
-pub const SCENARIOS: [&str; 17] = [
+pub const SCENARIOS: [&str; 24] = [
     "list",
     "stat",
     "list-stat",
@@ -275,6 +338,13 @@ pub const SCENARIOS: [&str; 17] = [
     "checksum",
     "convert-plan",
     "columns",
+    "rename-preview",
+    "compare-trees",
+    "flat-view",
+    "duplicates",
+    "tab-switch",
+    "panel-sort",
+    "plugin-column",
 ];
 
 /// The archive listings: their id, the archive's name and its kind in
@@ -285,7 +355,7 @@ const ARCHIVE_LISTINGS: [(&str, &str, &str); 3] = [
     ("archive-7z", "list.7z", "7z"),
 ];
 
-const USAGE: &str = "Usage: cargo xtask bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--gate]";
+const USAGE: &str = "Usage: cargo xtask bench [--quick] [--only ID] [--gui] [--cold-build] [--save-baseline] [--save-as NAME] [--gate]";
 
 /// Reads the arguments after `bench`.
 pub fn parse(args: &[&str]) -> Result<Options> {
@@ -300,6 +370,17 @@ pub fn parse(args: &[&str]) -> Result<Options> {
             "--cold-build" => {
                 options.gui = true;
                 options.cold_build = true;
+            }
+            "--save-as" => {
+                let Some(name) = rest.next() else {
+                    bail!("--save-as needs a name of small letters, digits and hyphens. {USAGE}");
+                };
+                if !plain_run_name(name) {
+                    bail!(
+                        "{name} is not a plain run name: small letters, digits and hyphens, and not baseline"
+                    );
+                }
+                options.save_as = Some((*name).to_owned());
             }
             "--only" => {
                 let Some(id) = rest.next() else {
@@ -739,6 +820,32 @@ pub fn run_scenarios(setting: &Setting<'_>) -> Result<Vec<Outcome>> {
     }
     if wanted(setting, &["columns"]) {
         outcomes.push(columns_scenario(setting)?);
+    }
+    if wanted(setting, &["rename-preview"]) {
+        outcomes.push(alpha5::rename_scenario(setting)?);
+    }
+    if wanted(setting, &["compare-trees", "flat-view"]) {
+        // The flat view walks the compare's left tree: one tree written
+        // for both.
+        let trees = alpha5::compare_trees(setting)?;
+        if wanted(setting, &["compare-trees"]) {
+            outcomes.push(alpha5::compare_scenario(setting, &trees)?);
+        }
+        if wanted(setting, &["flat-view"]) {
+            outcomes.push(alpha5::flat_scenario(setting, &trees)?);
+        }
+    }
+    if wanted(setting, &["duplicates"]) {
+        outcomes.push(alpha5::duplicates_scenario(setting)?);
+    }
+    if wanted(setting, &["tab-switch"]) {
+        outcomes.push(alpha5::tab_switch_scenario(setting)?);
+    }
+    if wanted(setting, &["panel-sort"]) {
+        outcomes.push(alpha5::panel_sort_scenario(setting)?);
+    }
+    if wanted(setting, &["plugin-column"]) {
+        outcomes.push(alpha5::plugin_column_scenario(setting)?);
     }
     Ok(outcomes)
 }
@@ -1378,7 +1485,11 @@ pub fn describe(
             second.push(' ');
             second.extend(c.to_uppercase());
             second.push_str(chars.as_str());
-            second.push('.');
+            // A note that ends in a sentence of its own (a count line)
+            // keeps its one period.
+            if !second.ends_with('.') {
+                second.push('.');
+            }
         }
     }
     let mut lines = vec![first, second];
@@ -1507,6 +1618,29 @@ pub fn run(root: &Path, args: &[&str]) -> Result<bool> {
     )
     .with_context(|| format!("{} could not be written", result_file.display()))?;
     println!("bench: the medians are in {}.", result_file.display());
+    if let Some(name) = &options.save_as {
+        let file = root.join("bench").join(format!("{name}.json"));
+        let mut saved: SavedRuns = match fs::read_to_string(&file) {
+            Ok(text) => serde_json::from_str(&text)
+                .with_context(|| format!("{} is not valid", file.display()))?,
+            Err(_) => SavedRuns::default(),
+        };
+        if saved.about.is_empty() {
+            saved.about = format!(
+                "Runs saved with cargo xtask bench --save-as {name}; not a baseline, never compared with (docs/dev/bench.md)."
+            );
+        }
+        saved.runs.push(result.clone());
+        fs::write(
+            &file,
+            format!("{}\n", serde_json::to_string_pretty(&saved)?),
+        )
+        .with_context(|| format!("{} could not be written", file.display()))?;
+        println!(
+            "bench: added as run {} of bench/{name}.json.",
+            saved.runs.len()
+        );
+    }
     if options.save_baseline {
         if baseline.about.is_empty() {
             baseline.about = "The bench's baseline per platform, written by cargo xtask bench --save-baseline (docs/dev/bench.md).".to_owned();
@@ -1595,6 +1729,12 @@ mod tests {
         assert!(cold.gui && cold.cold_build && cold.only.is_none());
         assert!(parse(&["--quick", "--save-baseline"]).is_err());
         assert!(parse(&["--fast"]).is_err());
+        let named = parse(&["--save-as", "alpha5-provisional"]).unwrap();
+        assert_eq!(named.save_as.as_deref(), Some("alpha5-provisional"));
+        for bad in ["baseline", "Alpha5", "a b", "-x", "../x", "a.json", ""] {
+            assert!(parse(&["--save-as", bad]).is_err(), "{bad}");
+        }
+        assert!(parse(&["--save-as"]).is_err());
     }
 
     #[test]
@@ -1648,6 +1788,14 @@ mod tests {
             "List 100,000 entries: 412 ms, within the 800 ms budget."
         );
         assert_eq!(lines[1], "Runs: 398 ms, 455 ms, 412 ms. Warm.");
+        let counted = Outcome {
+            note: "found; 2 groups.".to_owned(),
+            ..outcome.clone()
+        };
+        assert_eq!(
+            describe(&counted, None, 20).0[1],
+            "Runs: 398 ms, 455 ms, 412 ms. Found; 2 groups."
+        );
         assert!(diroxide_core::format::within_cells(
             &lines[0],
             "List 100,000 entries: 412 ms"

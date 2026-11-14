@@ -1,0 +1,932 @@
+{
+  "about": "Runs saved with cargo xtask bench --save-as alpha5-provisional; not a baseline, never compared with (docs/dev/bench.md).",
+  "runs": [
+    {
+      "platform": "windows",
+      "recorded_utc": "2026-11-13",
+      "started_utc": "2026-11-13 09:18 UTC",
+      "machine": {
+        "processor": "AMD Ryzen 5 5600G with Radeon Graphics",
+        "cores": "6 cores, 12 threads",
+        "memory": "64 GB",
+        "system": "Windows 11 Home, build 26200",
+        "disk": "Samsung SSD 990 EVO 2TB, NVMe"
+      },
+      "versions": {
+        "diroxide": "0.1.0-alpha.4",
+        "commit": "d8f5373 with changes",
+        "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)"
+      },
+      "quick": false,
+      "optimized": true,
+      "scenarios": [
+        {
+          "id": "list",
+          "label": "List 100,000 entries",
+          "runs_ms": [
+            130.3,
+            134.2,
+            121.5
+          ],
+          "median_ms": 130.3,
+          "budget_ms": 800,
+          "note": "warm, through the local provider"
+        },
+        {
+          "id": "stat",
+          "label": "Stat 100,000 entries",
+          "runs_ms": [
+            7669.9,
+            7513.2,
+            5839.1
+          ],
+          "median_ms": 7513.2,
+          "budget_ms": 800,
+          "note": "each by its place, without a listing"
+        },
+        {
+          "id": "list-stat",
+          "label": "List, then stat each of 100,000",
+          "runs_ms": [
+            5549.2,
+            6222.0,
+            5678.5
+          ],
+          "median_ms": 5678.5,
+          "budget_ms": null,
+          "note": "as a panel that fills its columns late"
+        },
+        {
+          "id": "copy",
+          "label": "Copy 10.0 GB through the engine",
+          "runs_ms": [
+            29313.5,
+            25303.6,
+            50302.9
+          ],
+          "median_ms": 29313.5,
+          "budget_ms": null,
+          "note": "341 MB a second"
+        },
+        {
+          "id": "copy-system",
+          "label": "Copy 10.0 GB with the system call",
+          "runs_ms": [
+            45168.8,
+            60756.6,
+            67042.4
+          ],
+          "median_ms": 60756.6,
+          "budget_ms": null,
+          "note": "165 MB a second"
+        },
+        {
+          "id": "slow-place",
+          "label": "Copy 40 files from a slow place",
+          "runs_ms": [
+            1380.3,
+            1380.6,
+            1379.2
+          ],
+          "median_ms": 1380.3,
+          "budget_ms": null,
+          "note": "stall said in 3 of 3 runs"
+        },
+        {
+          "id": "archive-zip",
+          "label": "List 100,000 entries in a zip",
+          "runs_ms": [
+            228.4,
+            224.8,
+            219.9
+          ],
+          "median_ms": 224.8,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-tar",
+          "label": "List 100,000 entries in a tar",
+          "runs_ms": [
+            262.4,
+            251.9,
+            244.7
+          ],
+          "median_ms": 251.9,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-7z",
+          "label": "List 100,000 entries in a 7z",
+          "runs_ms": [
+            208.3,
+            208.9,
+            224.3
+          ],
+          "median_ms": 208.9,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "unpack",
+          "label": "Unpack a zip of 200 MB",
+          "runs_ms": [
+            228.4,
+            418.4,
+            395.2
+          ],
+          "median_ms": 395.2,
+          "budget_ms": null,
+          "note": "506 MB a second, through the unpack runner"
+        },
+        {
+          "id": "viewer",
+          "label": "View the first screen of a 256 MB log",
+          "runs_ms": [
+            16.2,
+            9.2,
+            8.9
+          ],
+          "median_ms": 9.2,
+          "budget_ms": null,
+          "note": "24 rows, screen-reader mode"
+        },
+        {
+          "id": "search-name",
+          "label": "Search 100,000 files by name",
+          "runs_ms": [
+            310.9,
+            65.0,
+            60.9
+          ],
+          "median_ms": 65.0,
+          "budget_ms": 1500,
+          "note": "1,000 found, through the search engine"
+        },
+        {
+          "id": "search-content",
+          "label": "Search 995 MB of files by contents",
+          "runs_ms": [
+            1247.7,
+            1174.7,
+            1160.7
+          ],
+          "median_ms": 1174.7,
+          "budget_ms": 3750,
+          "note": "1,000 found, through the search engine"
+        },
+        {
+          "id": "details",
+          "label": "Read the details of 1,000 files",
+          "runs_ms": [
+            362.8,
+            420.9,
+            289.9
+          ],
+          "median_ms": 362.8,
+          "budget_ms": null,
+          "note": "3,000 rows, no helper program"
+        },
+        {
+          "id": "checksum",
+          "label": "SHA-256 of a file of 1.0 GB",
+          "runs_ms": [
+            729.7,
+            819.5,
+            658.2
+          ],
+          "median_ms": 729.7,
+          "budget_ms": null,
+          "note": "1.4 GB a second"
+        },
+        {
+          "id": "convert-plan",
+          "label": "Plan converting 100 files, a dry run",
+          "runs_ms": [
+            48.5,
+            10.0,
+            9.1
+          ],
+          "median_ms": 10.0,
+          "budget_ms": null,
+          "note": "Markdown to plain text, carta built in"
+        },
+        {
+          "id": "columns",
+          "label": "List 100,000 entries with three columns",
+          "runs_ms": [
+            1813.3,
+            1564.9,
+            1651.3
+          ],
+          "median_ms": 1651.3,
+          "budget_ms": null,
+          "note": "the app from its start until idle"
+        },
+        {
+          "id": "rename-preview",
+          "label": "Preview renaming 10,000 files",
+          "runs_ms": [
+            94.8,
+            92.6,
+            93.9
+          ],
+          "median_ms": 93.9,
+          "budget_ms": null,
+          "note": "the plan alone 80 ms, made again after each change; 10 problems. 9,990 of 10,000 files will change."
+        },
+        {
+          "id": "compare-trees",
+          "label": "Compare two trees of 100,000 files",
+          "runs_ms": [
+            717.2,
+            712.7,
+            733.1
+          ],
+          "median_ms": 717.2,
+          "budget_ms": null,
+          "note": "by size and time; the plan to update there 69 ms more; 2,500 differences in 100,600 items: 1,000 different, 1,000 only here, 500 only there. 98,100 same."
+        },
+        {
+          "id": "flat-view",
+          "label": "Flat view of 100,000 files",
+          "runs_ms": [
+            778.7,
+            758.2,
+            785.7
+          ],
+          "median_ms": 778.7,
+          "budget_ms": null,
+          "note": "through the search engine, rows made; Flat view of here: 100,000 files, every level"
+        },
+        {
+          "id": "duplicates",
+          "label": "Find duplicates among 10,000 files",
+          "runs_ms": [
+            4166.1,
+            2664.3,
+            2721.0
+          ],
+          "median_ms": 2721.0,
+          "budget_ms": null,
+          "note": "through the app with its BLAKE3; 1000 groups, 2,000 files, 23.3 MB to free."
+        },
+        {
+          "id": "tab-switch",
+          "label": "Switch to a tab of 100,000 entries",
+          "runs_ms": [
+            1056.6,
+            1045.6,
+            1042.0
+          ],
+          "median_ms": 1045.6,
+          "budget_ms": null,
+          "note": "shown in 0.0 ms, then listed again until idle"
+        },
+        {
+          "id": "panel-sort",
+          "label": "Sort a panel of 100,000 entries",
+          "runs_ms": [
+            175.2,
+            173.8,
+            169.2
+          ],
+          "median_ms": 173.8,
+          "budget_ms": null,
+          "note": "by size, then by name, each the command to its answer; type-ahead 6.7 ms"
+        },
+        {
+          "id": "plugin-column",
+          "label": "One column request for 1,000 rows",
+          "runs_ms": [
+            4.0,
+            3.4,
+            3.9
+          ],
+          "median_ms": 3.9,
+          "budget_ms": null,
+          "note": "to a running process plugin; cold start 76 ms; in batches of 500 5.5 ms"
+        }
+      ]
+    },
+    {
+      "platform": "windows",
+      "recorded_utc": "2026-11-13",
+      "started_utc": "2026-11-13 09:32 UTC",
+      "machine": {
+        "processor": "AMD Ryzen 5 5600G with Radeon Graphics",
+        "cores": "6 cores, 12 threads",
+        "memory": "64 GB",
+        "system": "Windows 11 Home, build 26200",
+        "disk": "Samsung SSD 990 EVO 2TB, NVMe"
+      },
+      "versions": {
+        "diroxide": "0.1.0-alpha.4",
+        "commit": "d8f5373 with changes",
+        "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)"
+      },
+      "quick": false,
+      "optimized": true,
+      "scenarios": [
+        {
+          "id": "list",
+          "label": "List 100,000 entries",
+          "runs_ms": [
+            109.8,
+            117.2,
+            93.7
+          ],
+          "median_ms": 109.8,
+          "budget_ms": 800,
+          "note": "warm, through the local provider"
+        },
+        {
+          "id": "stat",
+          "label": "Stat 100,000 entries",
+          "runs_ms": [
+            6344.8,
+            6099.8,
+            5843.3
+          ],
+          "median_ms": 6099.8,
+          "budget_ms": 800,
+          "note": "each by its place, without a listing"
+        },
+        {
+          "id": "list-stat",
+          "label": "List, then stat each of 100,000",
+          "runs_ms": [
+            6196.6,
+            6080.8,
+            5799.7
+          ],
+          "median_ms": 6080.8,
+          "budget_ms": null,
+          "note": "as a panel that fills its columns late"
+        },
+        {
+          "id": "copy",
+          "label": "Copy 10.0 GB through the engine",
+          "runs_ms": [
+            6783.5,
+            12599.5,
+            23357.1
+          ],
+          "median_ms": 12599.5,
+          "budget_ms": null,
+          "note": "794 MB a second"
+        },
+        {
+          "id": "copy-system",
+          "label": "Copy 10.0 GB with the system call",
+          "runs_ms": [
+            39980.0,
+            32071.4,
+            22525.3
+          ],
+          "median_ms": 32071.4,
+          "budget_ms": null,
+          "note": "312 MB a second"
+        },
+        {
+          "id": "slow-place",
+          "label": "Copy 40 files from a slow place",
+          "runs_ms": [
+            1389.8,
+            1380.8,
+            1392.5
+          ],
+          "median_ms": 1389.8,
+          "budget_ms": null,
+          "note": "stall said in 3 of 3 runs"
+        },
+        {
+          "id": "archive-zip",
+          "label": "List 100,000 entries in a zip",
+          "runs_ms": [
+            241.5,
+            243.6,
+            230.9
+          ],
+          "median_ms": 241.5,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-tar",
+          "label": "List 100,000 entries in a tar",
+          "runs_ms": [
+            229.4,
+            227.3,
+            224.5
+          ],
+          "median_ms": 227.3,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-7z",
+          "label": "List 100,000 entries in a 7z",
+          "runs_ms": [
+            181.0,
+            179.0,
+            181.2
+          ],
+          "median_ms": 181.0,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "unpack",
+          "label": "Unpack a zip of 200 MB",
+          "runs_ms": [
+            250.1,
+            259.1,
+            458.9
+          ],
+          "median_ms": 259.1,
+          "budget_ms": null,
+          "note": "772 MB a second, through the unpack runner"
+        },
+        {
+          "id": "viewer",
+          "label": "View the first screen of a 256 MB log",
+          "runs_ms": [
+            16.3,
+            8.7,
+            8.7
+          ],
+          "median_ms": 8.7,
+          "budget_ms": null,
+          "note": "24 rows, screen-reader mode"
+        },
+        {
+          "id": "search-name",
+          "label": "Search 100,000 files by name",
+          "runs_ms": [
+            426.6,
+            342.3,
+            194.4
+          ],
+          "median_ms": 342.3,
+          "budget_ms": 1500,
+          "note": "1,000 found, through the search engine"
+        },
+        {
+          "id": "search-content",
+          "label": "Search 995 MB of files by contents",
+          "runs_ms": [
+            1386.0,
+            1194.4,
+            1214.0
+          ],
+          "median_ms": 1214.0,
+          "budget_ms": 3750,
+          "note": "1,000 found, through the search engine"
+        },
+        {
+          "id": "details",
+          "label": "Read the details of 1,000 files",
+          "runs_ms": [
+            358.3,
+            616.3,
+            355.2
+          ],
+          "median_ms": 358.3,
+          "budget_ms": null,
+          "note": "3,000 rows, no helper program"
+        },
+        {
+          "id": "checksum",
+          "label": "SHA-256 of a file of 1.0 GB",
+          "runs_ms": [
+            778.1,
+            667.0,
+            642.0
+          ],
+          "median_ms": 667.0,
+          "budget_ms": null,
+          "note": "1.5 GB a second"
+        },
+        {
+          "id": "convert-plan",
+          "label": "Plan converting 100 files, a dry run",
+          "runs_ms": [
+            79.0,
+            8.8,
+            9.5
+          ],
+          "median_ms": 9.5,
+          "budget_ms": null,
+          "note": "Markdown to plain text, carta built in"
+        },
+        {
+          "id": "columns",
+          "label": "List 100,000 entries with three columns",
+          "runs_ms": [
+            1451.8,
+            1480.4,
+            1454.5
+          ],
+          "median_ms": 1454.5,
+          "budget_ms": null,
+          "note": "the app from its start until idle"
+        },
+        {
+          "id": "rename-preview",
+          "label": "Preview renaming 10,000 files",
+          "runs_ms": [
+            100.3,
+            98.8,
+            94.4
+          ],
+          "median_ms": 98.8,
+          "budget_ms": null,
+          "note": "the plan alone 85 ms, made again after each change; 10 problems. 9,990 of 10,000 files will change."
+        },
+        {
+          "id": "compare-trees",
+          "label": "Compare two trees of 100,000 files",
+          "runs_ms": [
+            968.7,
+            647.3,
+            845.0
+          ],
+          "median_ms": 845.0,
+          "budget_ms": null,
+          "note": "by size and time; the plan to update there 66 ms more; 2,500 differences in 100,600 items: 1,000 different, 1,000 only here, 500 only there. 98,100 same."
+        },
+        {
+          "id": "flat-view",
+          "label": "Flat view of 100,000 files",
+          "runs_ms": [
+            723.9,
+            689.2,
+            715.0
+          ],
+          "median_ms": 715.0,
+          "budget_ms": null,
+          "note": "through the search engine, rows made; Flat view of here: 100,000 files, every level"
+        },
+        {
+          "id": "duplicates",
+          "label": "Find duplicates among 10,000 files",
+          "runs_ms": [
+            3522.1,
+            2638.5,
+            2888.2
+          ],
+          "median_ms": 2888.2,
+          "budget_ms": null,
+          "note": "through the app with its BLAKE3; 1000 groups, 2,000 files, 23.3 MB to free."
+        },
+        {
+          "id": "tab-switch",
+          "label": "Switch to a tab of 100,000 entries",
+          "runs_ms": [
+            1103.3,
+            1051.4,
+            1050.9
+          ],
+          "median_ms": 1051.4,
+          "budget_ms": null,
+          "note": "shown in 0.0 ms, then listed again until idle"
+        },
+        {
+          "id": "panel-sort",
+          "label": "Sort a panel of 100,000 entries",
+          "runs_ms": [
+            174.8,
+            172.3,
+            178.5
+          ],
+          "median_ms": 174.8,
+          "budget_ms": null,
+          "note": "by size, then by name, each the command to its answer; type-ahead 6.7 ms"
+        },
+        {
+          "id": "plugin-column",
+          "label": "One column request for 1,000 rows",
+          "runs_ms": [
+            3.7,
+            3.2,
+            3.1
+          ],
+          "median_ms": 3.2,
+          "budget_ms": null,
+          "note": "to a running process plugin; cold start 86 ms; in batches of 500 4.5 ms"
+        }
+      ]
+    },
+    {
+      "platform": "windows",
+      "recorded_utc": "2026-11-13",
+      "started_utc": "2026-11-13 09:41 UTC",
+      "machine": {
+        "processor": "AMD Ryzen 5 5600G with Radeon Graphics",
+        "cores": "6 cores, 12 threads",
+        "memory": "64 GB",
+        "system": "Windows 11 Home, build 26200",
+        "disk": "Samsung SSD 990 EVO 2TB, NVMe"
+      },
+      "versions": {
+        "diroxide": "0.1.0-alpha.4",
+        "commit": "d8f5373 with changes",
+        "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)"
+      },
+      "quick": false,
+      "optimized": true,
+      "scenarios": [
+        {
+          "id": "list",
+          "label": "List 100,000 entries",
+          "runs_ms": [
+            80.7,
+            81.9,
+            81.1
+          ],
+          "median_ms": 81.1,
+          "budget_ms": 800,
+          "note": "warm, through the local provider"
+        },
+        {
+          "id": "stat",
+          "label": "Stat 100,000 entries",
+          "runs_ms": [
+            5475.6,
+            5322.2,
+            5927.8
+          ],
+          "median_ms": 5475.6,
+          "budget_ms": 800,
+          "note": "each by its place, without a listing"
+        },
+        {
+          "id": "list-stat",
+          "label": "List, then stat each of 100,000",
+          "runs_ms": [
+            5578.0,
+            5682.1,
+            5831.1
+          ],
+          "median_ms": 5682.1,
+          "budget_ms": null,
+          "note": "as a panel that fills its columns late"
+        },
+        {
+          "id": "copy",
+          "label": "Copy 10.0 GB through the engine",
+          "runs_ms": [
+            6805.4,
+            16668.9,
+            10050.4
+          ],
+          "median_ms": 10050.4,
+          "budget_ms": null,
+          "note": "995 MB a second"
+        },
+        {
+          "id": "copy-system",
+          "label": "Copy 10.0 GB with the system call",
+          "runs_ms": [
+            21451.8,
+            9707.0,
+            12869.1
+          ],
+          "median_ms": 12869.1,
+          "budget_ms": null,
+          "note": "777 MB a second"
+        },
+        {
+          "id": "slow-place",
+          "label": "Copy 40 files from a slow place",
+          "runs_ms": [
+            1427.8,
+            1395.4,
+            1356.0
+          ],
+          "median_ms": 1395.4,
+          "budget_ms": null,
+          "note": "stall said in 3 of 3 runs"
+        },
+        {
+          "id": "archive-zip",
+          "label": "List 100,000 entries in a zip",
+          "runs_ms": [
+            232.6,
+            249.3,
+            244.4
+          ],
+          "median_ms": 244.4,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-tar",
+          "label": "List 100,000 entries in a tar",
+          "runs_ms": [
+            248.5,
+            220.4,
+            227.1
+          ],
+          "median_ms": 227.1,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "archive-7z",
+          "label": "List 100,000 entries in a 7z",
+          "runs_ms": [
+            179.4,
+            197.1,
+            180.9
+          ],
+          "median_ms": 180.9,
+          "budget_ms": null,
+          "note": "through the archive provider, from the open to the last entry"
+        },
+        {
+          "id": "unpack",
+          "label": "Unpack a zip of 200 MB",
+          "runs_ms": [
+            400.3,
+            305.7,
+            266.1
+          ],
+          "median_ms": 305.7,
+          "budget_ms": null,
+          "note": "654 MB a second, through the unpack runner"
+        },
+        {
+          "id": "viewer",
+          "label": "View the first screen of a 256 MB log",
+          "runs_ms": [
+            18.3,
+            9.2,
+            9.5
+          ],
+          "median_ms": 9.5,
+          "budget_ms": null,
+          "note": "24 rows, screen-reader mode"
+        },
+        {
+          "id": "search-name",
+          "label": "Search 100,000 files by name",
+          "runs_ms": [
+            401.2,
+            284.3,
+            250.5
+          ],
+          "median_ms": 284.3,
+          "budget_ms": 1500,
+          "note": "1,000 found, through the search engine"
+        },
+        {
+          "id": "search-content",
+          "label": "Search 995 MB of files by contents",
+          "runs_ms": [
+            1751.0,
+            1468.8,
+            1442.4
+          ],
+          "median_ms": 1468.8,
+          "budget_ms": 3750,
+          "note": "1,000 found, through the search engine"
+        },
+        {
+          "id": "details",
+          "label": "Read the details of 1,000 files",
+          "runs_ms": [
+            341.6,
+            373.9,
+            321.5
+          ],
+          "median_ms": 341.6,
+          "budget_ms": null,
+          "note": "3,000 rows, no helper program"
+        },
+        {
+          "id": "checksum",
+          "label": "SHA-256 of a file of 1.0 GB",
+          "runs_ms": [
+            642.5,
+            616.0,
+            617.4
+          ],
+          "median_ms": 617.4,
+          "budget_ms": null,
+          "note": "1.6 GB a second"
+        },
+        {
+          "id": "convert-plan",
+          "label": "Plan converting 100 files, a dry run",
+          "runs_ms": [
+            22.4,
+            9.0,
+            8.6
+          ],
+          "median_ms": 9.0,
+          "budget_ms": null,
+          "note": "Markdown to plain text, carta built in"
+        },
+        {
+          "id": "columns",
+          "label": "List 100,000 entries with three columns",
+          "runs_ms": [
+            1477.8,
+            1398.4,
+            1535.2
+          ],
+          "median_ms": 1477.8,
+          "budget_ms": null,
+          "note": "the app from its start until idle"
+        },
+        {
+          "id": "rename-preview",
+          "label": "Preview renaming 10,000 files",
+          "runs_ms": [
+            99.2,
+            94.5,
+            96.2
+          ],
+          "median_ms": 96.2,
+          "budget_ms": null,
+          "note": "the plan alone 83 ms, made again after each change; 10 problems. 9,990 of 10,000 files will change."
+        },
+        {
+          "id": "compare-trees",
+          "label": "Compare two trees of 100,000 files",
+          "runs_ms": [
+            710.4,
+            767.5,
+            742.5
+          ],
+          "median_ms": 742.5,
+          "budget_ms": null,
+          "note": "by size and time; the plan to update there 74 ms more; 2,500 differences in 100,600 items: 1,000 different, 1,000 only here, 500 only there. 98,100 same."
+        },
+        {
+          "id": "flat-view",
+          "label": "Flat view of 100,000 files",
+          "runs_ms": [
+            815.7,
+            862.5,
+            842.6
+          ],
+          "median_ms": 842.6,
+          "budget_ms": null,
+          "note": "through the search engine, rows made; Flat view of here: 100,000 files, every level"
+        },
+        {
+          "id": "duplicates",
+          "label": "Find duplicates among 10,000 files",
+          "runs_ms": [
+            3940.9,
+            3253.7,
+            3089.8
+          ],
+          "median_ms": 3253.7,
+          "budget_ms": null,
+          "note": "through the app with its BLAKE3; 1000 groups, 2,000 files, 23.3 MB to free."
+        },
+        {
+          "id": "tab-switch",
+          "label": "Switch to a tab of 100,000 entries",
+          "runs_ms": [
+            1209.8,
+            1157.5,
+            1163.0
+          ],
+          "median_ms": 1163.0,
+          "budget_ms": null,
+          "note": "shown in 0.0 ms, then listed again until idle"
+        },
+        {
+          "id": "panel-sort",
+          "label": "Sort a panel of 100,000 entries",
+          "runs_ms": [
+            200.6,
+            200.7,
+            195.5
+          ],
+          "median_ms": 200.6,
+          "budget_ms": null,
+          "note": "by size, then by name, each the command to its answer; type-ahead 6.8 ms"
+        },
+        {
+          "id": "plugin-column",
+          "label": "One column request for 1,000 rows",
+          "runs_ms": [
+            4.8,
+            4.2,
+            4.3
+          ],
+          "median_ms": 4.3,
+          "budget_ms": null,
+          "note": "to a running process plugin; cold start 82 ms; in batches of 500 6.1 ms"
+        }
+      ]
+    }
+  ]
+}
