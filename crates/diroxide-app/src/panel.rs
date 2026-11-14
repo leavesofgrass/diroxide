@@ -1995,8 +1995,13 @@ mod tests {
 
     /// Spike five's panel half: 100,000 in-memory entries through the
     /// panel. The budgets (sort within 200 ms, a type-ahead key within 30
-    /// ms) are for release builds; this run prints its numbers and holds
-    /// a debug build to ten times them.
+    /// ms) are for release builds, and the bench's `panel-sort` holds
+    /// them (lane B5). This run prints its numbers and holds a debug
+    /// build to bounds that a busy machine passes and a sort or a lookup
+    /// gone wrong by an order of magnitude fails: the sort within 5
+    /// seconds (alone natively it took about 0.36 s; in the container
+    /// beside other work 2.0 s, past the old 2-second bound), a
+    /// type-ahead key within 300 ms (about 10 ms).
     #[test]
     fn a_folder_of_100_000_entries_sorts_and_searches_in_time() {
         use std::time::Instant;
@@ -2027,10 +2032,14 @@ mod tests {
         println!(
             "100,000 entries: rows {listed:?}, sort {sorted:?}, type-ahead {searched:?}, select all {selected:?}"
         );
-        let slack = if cfg!(debug_assertions) { 10 } else { 1 };
-        assert!(sorted.as_millis() < 200 * slack, "sort took {sorted:?}");
+        let (sort_ms, search_ms) = if cfg!(debug_assertions) {
+            (5_000, 300)
+        } else {
+            (200, 30)
+        };
+        assert!(sorted.as_millis() < sort_ms, "sort took {sorted:?}");
         assert!(
-            searched.as_millis() < 30 * slack,
+            searched.as_millis() < search_ms,
             "type-ahead took {searched:?}"
         );
     }
